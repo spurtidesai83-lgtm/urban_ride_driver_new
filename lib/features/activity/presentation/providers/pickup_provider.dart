@@ -9,6 +9,9 @@ class PickupStop {
   final String passengers;
   final String timeWindow;
   final String scheduledTime;
+  final String uqId;
+  final double latitude;
+  final double longitude;
   final String distance;
   final bool isArrived;
   final bool isPickedUp;
@@ -19,6 +22,9 @@ class PickupStop {
     required this.passengers,
     required this.timeWindow,
     required this.scheduledTime,
+    this.uqId = '',
+    this.latitude = 0.0,
+    this.longitude = 0.0,
     required this.distance,
     this.isArrived = false,
     this.isPickedUp = false,
@@ -30,6 +36,9 @@ class PickupStop {
     String? passengers,
     String? timeWindow,
     String? scheduledTime,
+    String? uqId,
+    double? latitude,
+    double? longitude,
     String? distance,
     bool? isArrived,
     bool? isPickedUp,
@@ -40,6 +49,9 @@ class PickupStop {
       passengers: passengers ?? this.passengers,
       timeWindow: timeWindow ?? this.timeWindow,
       scheduledTime: scheduledTime ?? this.scheduledTime,
+      uqId: uqId ?? this.uqId,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       distance: distance ?? this.distance,
       isArrived: isArrived ?? this.isArrived,
       isPickedUp: isPickedUp ?? this.isPickedUp,
@@ -53,6 +65,17 @@ class PickupState {
   final String dutyNo;
   final String tripStartTime;
   final bool hasStartedTrip;
+  final int tripNo;
+  final String startCheckpointName;
+  final String startCheckpointUqId;
+  final double startLatitude;
+  final double startLongitude;
+  final String startScheduledTime;
+  final String endCheckpointName;
+  final String endCheckpointUqId;
+  final double endLatitude;
+  final double endLongitude;
+  final String endScheduledTime;
 
   PickupState({
     required this.stops,
@@ -60,6 +83,17 @@ class PickupState {
     this.dutyNo = '',
     this.tripStartTime = '',
     this.hasStartedTrip = false,
+    this.tripNo = 0,
+    this.startCheckpointName = '',
+    this.startCheckpointUqId = '',
+    this.startLatitude = 0.0,
+    this.startLongitude = 0.0,
+    this.startScheduledTime = '',
+    this.endCheckpointName = '',
+    this.endCheckpointUqId = '',
+    this.endLatitude = 0.0,
+    this.endLongitude = 0.0,
+    this.endScheduledTime = '',
   });
 
   PickupState copyWith({
@@ -68,6 +102,17 @@ class PickupState {
     String? dutyNo,
     String? tripStartTime,
     bool? hasStartedTrip,
+    int? tripNo,
+    String? startCheckpointName,
+    String? startCheckpointUqId,
+    double? startLatitude,
+    double? startLongitude,
+    String? startScheduledTime,
+    String? endCheckpointName,
+    String? endCheckpointUqId,
+    double? endLatitude,
+    double? endLongitude,
+    String? endScheduledTime,
   }) {
     return PickupState(
       stops: stops ?? this.stops,
@@ -75,6 +120,17 @@ class PickupState {
       dutyNo: dutyNo ?? this.dutyNo,
       tripStartTime: tripStartTime ?? this.tripStartTime,
       hasStartedTrip: hasStartedTrip ?? this.hasStartedTrip,
+      tripNo: tripNo ?? this.tripNo,
+      startCheckpointName: startCheckpointName ?? this.startCheckpointName,
+      startCheckpointUqId: startCheckpointUqId ?? this.startCheckpointUqId,
+      startLatitude: startLatitude ?? this.startLatitude,
+      startLongitude: startLongitude ?? this.startLongitude,
+      startScheduledTime: startScheduledTime ?? this.startScheduledTime,
+      endCheckpointName: endCheckpointName ?? this.endCheckpointName,
+      endCheckpointUqId: endCheckpointUqId ?? this.endCheckpointUqId,
+      endLatitude: endLatitude ?? this.endLatitude,
+      endLongitude: endLongitude ?? this.endLongitude,
+      endScheduledTime: endScheduledTime ?? this.endScheduledTime,
     );
   }
 
@@ -122,6 +178,9 @@ class PickupNotifier extends StateNotifier<PickupState> {
         passengers: '${dutyStop.passengers} Passengers',
         timeWindow: 'Pickup Window: ${dutyStop.timeWindow}',
         scheduledTime: dutyStop.timeWindow,
+        uqId: dutyStop.uqId,
+        latitude: dutyStop.latitude,
+        longitude: dutyStop.longitude,
         distance: dutyStop.distance,
       );
     }).toList();
@@ -130,27 +189,42 @@ class PickupNotifier extends StateNotifier<PickupState> {
     state = PickupState(
       stops: pickupStops,
       currentStopIndex: 0,
-      dutyNo: duty.dutyNo,
+      dutyNo: (duty.routeCode != null && duty.routeCode!.isNotEmpty)
+          ? duty.routeCode!
+          : (duty.route.isNotEmpty ? duty.route : duty.dutyNo),
       tripStartTime: '',
       hasStartedTrip: false,
+      tripNo: duty.tripNo ?? 0,
+      startCheckpointName: duty.from,
+      startCheckpointUqId: duty.fromUqId ?? '',
+      startLatitude: duty.pickupLatitude,
+      startLongitude: duty.pickupLongitude,
+      startScheduledTime: duty.joiningTime,
+      endCheckpointName: duty.to,
+      endCheckpointUqId: duty.toUqId ?? '',
+      endLatitude: duty.dropLatitude,
+      endLongitude: duty.dropLongitude,
+      endScheduledTime: duty.closeTime,
     );
   }
 
   Future<void> startTripIfNeeded() async {
-    if (state.hasStartedTrip || state.stops.isEmpty || state.dutyNo.isEmpty) {
+    if (state.hasStartedTrip || state.dutyNo.isEmpty) {
       return;
     }
 
-    final currentStop = state.currentStop;
-    if (currentStop == null) return;
+    if (state.startCheckpointName.isEmpty) return;
 
     final now = DateTime.now();
     final request = TripLogRequest(
       dutyNo: state.dutyNo,
-      tripNo: 0,
-      checkpointName: currentStop.location,
-      scheduledTime: _formatScheduledTime(currentStop.scheduledTime),
+      tripNo: state.tripNo,
+      checkpointName: state.startCheckpointName,
+      scheduledTime: _formatScheduledTime(state.startScheduledTime),
       loggedTime: _formatTime24(now),
+      uqId: state.startCheckpointUqId,
+      latitude: state.startLatitude,
+      longitude: state.startLongitude,
     );
 
     print('🚗 [PickupProvider] Starting trip for duty: ${state.dutyNo}');
@@ -218,10 +292,13 @@ class PickupNotifier extends StateNotifier<PickupState> {
 
     return TripLogRequest(
       dutyNo: state.dutyNo,
-      tripNo: state.currentStopIndex + 1,
+      tripNo: state.tripNo,
       checkpointName: stop.location,
       scheduledTime: _formatScheduledTime(stop.scheduledTime),
       loggedTime: formattedLoggedTime,
+      uqId: stop.uqId,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
     );
   }
 
@@ -278,13 +355,21 @@ class PickupNotifier extends StateNotifier<PickupState> {
   }
 
   Future<void> endTrip() async {
-    final currentStop = state.currentStop;
-    if (currentStop == null || state.dutyNo.isEmpty || state.tripStartTime.isEmpty) {
+    if (state.dutyNo.isEmpty || state.tripStartTime.isEmpty || state.endCheckpointName.isEmpty) {
       return;
     }
 
-    final loggedTime = DateTime.now().toIso8601String();
-    final request = _buildTripLogRequest(currentStop, loggedTime);
+    final now = DateTime.now();
+    final request = TripLogRequest(
+      dutyNo: state.dutyNo,
+      tripNo: state.tripNo,
+      checkpointName: state.endCheckpointName,
+      scheduledTime: _formatScheduledTime(state.endScheduledTime),
+      loggedTime: _formatTime24(now),
+      uqId: state.endCheckpointUqId,
+      latitude: state.endLatitude,
+      longitude: state.endLongitude,
+    );
     print('🚗 [PickupProvider] Ending trip for duty: ${state.dutyNo}');
     final response = await _repository.endTrip(request);
     

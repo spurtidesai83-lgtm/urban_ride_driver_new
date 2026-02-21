@@ -5,6 +5,7 @@ import 'storage_service.dart';
 import '../../features/home/data/models/dashboard_models.dart';
 import '../../features/home/data/models/schedule_models.dart';
 import '../../features/home/data/models/clock_models.dart';
+import '../../features/activity/data/models/live_trip_model.dart';
 
 class ScheduleApiService {
   // Get dashboard data
@@ -73,6 +74,48 @@ class ScheduleApiService {
       }
     } catch (e) {
       throw Exception('Failed to get weekly schedule: $e');
+    }
+  }
+
+  Future<LiveTripModel?> getLiveTrip() async {
+    try {
+      final token = await StorageService.getToken();
+      final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.liveTripEndpoint));
+
+      final response = await http.get(
+        url,
+        headers: ApiConfig.getHeaders(token: token),
+      ).timeout(ApiConfig.connectTimeout);
+
+      if (response.statusCode == 204) {
+        return null;
+      }
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+
+        if (jsonData is Map<String, dynamic>) {
+          final rawData = jsonData['data'];
+          if (rawData is Map<String, dynamic>) {
+            return LiveTripModel.fromJson(rawData);
+          }
+          return LiveTripModel.fromJson(jsonData);
+        }
+
+        return null;
+      }
+
+      if (response.statusCode == 404) {
+        return null;
+      }
+
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Failed to fetch live trip');
+    } catch (e) {
+      if (e.toString().contains('404')) {
+        return null;
+      }
+      throw Exception('Failed to get live trip: $e');
     }
   }
 

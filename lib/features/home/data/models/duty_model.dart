@@ -1,6 +1,7 @@
 class DutyStop {
   final String stopNumber;
   final String location;
+  final String uqId;
   final String passengers;
   final String timeWindow;
   final String distance;
@@ -10,6 +11,7 @@ class DutyStop {
   DutyStop({
     required this.stopNumber,
     required this.location,
+    this.uqId = '',
     required this.passengers,
     required this.timeWindow,
     required this.distance,
@@ -37,6 +39,11 @@ class DutyModel {
   final String? dropAddress;
   final String? serviceType; // From backend schedule (e.g., "ordinary", "shared cab")
   final String? steeringTime; // First trip's steering time
+  final String? restTime; // Trip rest duration from backend
+  final int? tripKms; // Trip distance from backend
+  final int? tripNo; // Backend trip identifier
+  final String? fromUqId;
+  final String? toUqId;
 
   DutyModel({
     required this.dutyNo,
@@ -57,6 +64,11 @@ class DutyModel {
     this.dropAddress,
     this.serviceType,
     this.steeringTime,
+    this.restTime,
+    this.tripKms,
+    this.tripNo,
+    this.fromUqId,
+    this.toUqId,
   });
 
   DutyModel copyWith({
@@ -78,6 +90,11 @@ class DutyModel {
     String? dropAddress,
     String? serviceType,
     String? steeringTime,
+    String? restTime,
+    int? tripKms,
+    int? tripNo,
+    String? fromUqId,
+    String? toUqId,
   }) {
     return DutyModel(
       dutyNo: dutyNo ?? this.dutyNo,
@@ -98,6 +115,11 @@ class DutyModel {
       dropAddress: dropAddress ?? this.dropAddress,
       serviceType: serviceType ?? this.serviceType,
       steeringTime: steeringTime ?? this.steeringTime,
+      restTime: restTime ?? this.restTime,
+      tripKms: tripKms ?? this.tripKms,
+      tripNo: tripNo ?? this.tripNo,
+      fromUqId: fromUqId ?? this.fromUqId,
+      toUqId: toUqId ?? this.toUqId,
     );
   }
 }

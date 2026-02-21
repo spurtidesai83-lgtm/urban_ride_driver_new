@@ -114,12 +114,24 @@ class HomeRepository {
             date: date,
             serviceType: serviceType,
             steeringTime: steeringTime,
+            restTime: trip.rest,
+            tripKms: trip.kms,
+            tripNo: trip.id,
+            fromUqId: trip.fromUqId,
+            toUqId: trip.toUqId,
+            pickupLatitude: trip.stops.isNotEmpty ? trip.stops.first.fromLatitude : 0.0,
+            pickupLongitude: trip.stops.isNotEmpty ? trip.stops.first.fromLongitude : 0.0,
+            dropLatitude: trip.stops.isNotEmpty ? trip.stops.last.toLatitude : 0.0,
+            dropLongitude: trip.stops.isNotEmpty ? trip.stops.last.toLongitude : 0.0,
             stops: trip.stops.map((stop) => DutyStop(
               stopNumber: stop.name,
               location: stop.name,
+              uqId: stop.toUqId,
               passengers: '0', // Not in API response
               timeWindow: stop.scheduledTime,
               distance: '0 km', // Not in API response
+              latitude: stop.toLatitude,
+              longitude: stop.toLongitude,
             )).toList(),
           );
           duties.add(duty);

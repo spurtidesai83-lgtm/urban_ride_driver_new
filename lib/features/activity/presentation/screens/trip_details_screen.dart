@@ -10,6 +10,11 @@ class TripDetailsScreen extends ConsumerWidget {
   final String from;
   final String to;
   final String? tripType;
+  final String? reportingTime;
+  final String? tripStartTime;
+  final String? estimatedEndTime;
+  final String? restTime;
+  final int? kms;
   final bool isLiveTrip;
   final List<DutyStop>? stops;
 
@@ -19,6 +24,11 @@ class TripDetailsScreen extends ConsumerWidget {
     required this.from,
     required this.to,
     this.tripType,
+    this.reportingTime,
+    this.tripStartTime,
+    this.estimatedEndTime,
+    this.restTime,
+    this.kms,
     this.isLiveTrip = false,
     this.stops,
   });
@@ -268,6 +278,19 @@ class TripDetailsScreen extends ConsumerWidget {
   }
 
   Widget _buildTimingBreakdown(BuildContext context) {
+    final actualReportingTime = (reportingTime != null && reportingTime!.isNotEmpty)
+      ? reportingTime!
+      : '--';
+    final actualTripStartTime = (tripStartTime != null && tripStartTime!.isNotEmpty)
+      ? tripStartTime!
+      : '--';
+    final actualRestTime = (restTime != null && restTime!.isNotEmpty)
+      ? restTime!
+      : '--';
+    final actualEstimatedEndTime = (estimatedEndTime != null && estimatedEndTime!.isNotEmpty)
+      ? estimatedEndTime!
+      : '--';
+
     return Container(
       padding: ResponsiveUtils.symmetricPadding(context, horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
@@ -287,10 +310,10 @@ class TripDetailsScreen extends ConsumerWidget {
             ),
           ),
           SizedBox(height: ResponsiveUtils.padding(context, 12)),
-          _buildTimingRow(context, 'Reporting Time', from == 'Mumbai' ? '01:30 PM' : '05:45 AM'),
-          _buildTimingRow(context, 'Trip Start', from == 'Mumbai' ? '02:30 PM' : '09:30 AM'),
-          _buildTimingRow(context, 'Meal Stop', from == 'Mumbai' ? '05:00 - 05:30 PM' : '12:15 - 12:45 PM'),
-          _buildTimingRow(context, 'Estimated End', from == 'Mumbai' ? '06:30 PM' : '02:30 PM'),
+          _buildTimingRow(context, 'Reporting Time', actualReportingTime),
+          _buildTimingRow(context, 'Trip Start', actualTripStartTime),
+          _buildTimingRow(context, 'Rest Time', actualRestTime),
+          _buildTimingRow(context, 'Estimated End', actualEstimatedEndTime),
         ],
       ),
     );
@@ -323,6 +346,8 @@ class TripDetailsScreen extends ConsumerWidget {
   }
 
   Widget _buildLocationSection(BuildContext context) {
+    final kmsLabel = kms != null ? '$kms km' : '-- km';
+
     return Container(
       padding: ResponsiveUtils.symmetricPadding(context, horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
@@ -372,7 +397,7 @@ class TripDetailsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Drive 10 min (4.3 km)',
+                  kmsLabel,
                   style: TextStyle(
                     fontSize: ResponsiveUtils.fontSize(context, 13),
                     color: Colors.grey[600],

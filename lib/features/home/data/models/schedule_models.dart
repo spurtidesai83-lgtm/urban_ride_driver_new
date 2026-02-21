@@ -40,18 +40,46 @@ String _extractRouteCode(String routeNo) {
 // Stop Model (for trip stops)
 class StopModel {
   final String name;
+  final String fromCheckpoint;
+  final String toCheckpoint;
+  final String fromUqId;
+  final String toUqId;
+  final double fromLatitude;
+  final double fromLongitude;
+  final double toLatitude;
+  final double toLongitude;
   final String scheduledTime;
   final String loggedTime;
 
   StopModel({
     required this.name,
+    this.fromCheckpoint = '',
+    this.toCheckpoint = '',
+    this.fromUqId = '',
+    this.toUqId = '',
+    this.fromLatitude = 0.0,
+    this.fromLongitude = 0.0,
+    this.toLatitude = 0.0,
+    this.toLongitude = 0.0,
     required this.scheduledTime,
     required this.loggedTime,
   });
 
   factory StopModel.fromJson(Map<String, dynamic> json) {
+    final fromValue = (json['from'] ?? '').toString();
+    final toValue = (json['to'] ?? '').toString();
+    final toCheckpoint = (json['toCheckpoint'] ?? json['to'] ?? json['name'] ?? '').toString();
+
     return StopModel(
-      name: json['toCheckpoint'] ?? json['name'] ?? '',
+      name: toCheckpoint,
+      fromCheckpoint: fromValue,
+      toCheckpoint: toCheckpoint,
+      fromUqId: fromValue,
+      toUqId: toValue,
+      fromLatitude: _parseDouble(json['fromLatitude']),
+      fromLongitude: _parseDouble(json['fromLongitude']),
+      toLatitude: _parseDouble(json['toLatitude']),
+      toLongitude: _parseDouble(json['toLongitude']),
       scheduledTime: json['arrivalTime'] ?? json['scheduledTime'] ?? '',
       loggedTime: json['departureTime'] ?? json['loggedTime'] ?? '',
     );
@@ -70,7 +98,9 @@ class StopModel {
 class ApiTripModel {
   final int id;
   final String fromLocation;
+  final String fromUqId;
   final String toLocation;
+  final String toUqId;
   final int kms;
   final int stages;
   final double fare;
@@ -83,7 +113,9 @@ class ApiTripModel {
   ApiTripModel({
     required this.id,
     required this.fromLocation,
+    required this.fromUqId,
     required this.toLocation,
+    required this.toUqId,
     required this.kms,
     required this.stages,
     required this.fare,
@@ -98,7 +130,9 @@ class ApiTripModel {
     return ApiTripModel(
       id: json['id'] ?? 0,
       fromLocation: json['fromLocation'] ?? '',
+      fromUqId: (json['fromUqId'] ?? '').toString(),
       toLocation: json['toLocation'] ?? '',
+      toUqId: (json['toUqId'] ?? '').toString(),
       kms: _parseInt(json['kms']),
       stages: _parseInt(json['stages']),
       fare: _parseDouble(json['fare']),
@@ -117,7 +151,9 @@ class ApiTripModel {
     return {
       'id': id,
       'fromLocation': fromLocation,
+      'fromUqId': fromUqId,
       'toLocation': toLocation,
+      'toUqId': toUqId,
       'kms': kms,
       'stages': stages,
       'fare': fare,

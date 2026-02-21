@@ -27,8 +27,9 @@ class ApiConfig {
 
   // Trip logging endpoints
   static const String startTripEndpoint = '$gatewayPrefix/api/driver/trips/start-trip';
-  static const String logTripEndpoint = '$gatewayPrefix/api/driver/trips/log-trip';
-  static const String endTripEndpoint = '$gatewayPrefix/api/driver/trips/end-trips';
+  static const String logTripEndpoint = '$gatewayPrefix/api/driver/trips/log-trips';
+  static const String endTripEndpoint = '$gatewayPrefix/api/driver/trips';
+  static const String liveTripEndpoint = '$gatewayPrefix/api/driver/trips/live-trip';
   
   // Leave endpoints
   static const String applyLeaveEndpoint = '$gatewayPrefix/api/driver/leave/apply';

@@ -5,8 +5,11 @@ class TripModel {
   final String to;
   final DateTime date;
   final String timeDisplay;
+  final String? endTime;
   final String tripType;
   final String steeringTime;
+  final String? restTime;
+  final int? kms;
   final String buttonText;
 
   TripModel({
@@ -16,8 +19,11 @@ class TripModel {
     required this.to,
     required this.date,
     required this.timeDisplay,
+    this.endTime,
     required this.tripType,
     required this.steeringTime,
+    this.restTime,
+    this.kms,
     required this.buttonText,
   });
 }
