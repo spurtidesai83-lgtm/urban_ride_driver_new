@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
 import 'package:urbandriver/features/home/data/models/duty_model.dart';
 import 'pin_entry_screen.dart';
+import 'trip_map_screen.dart';
 import 'package:urbandriver/features/home/presentation/providers/home_provider.dart';
 
 class TripDetailsScreen extends ConsumerWidget {
@@ -81,7 +82,7 @@ class TripDetailsScreen extends ConsumerWidget {
                     // Location Section
                     Padding(
                       padding: ResponsiveUtils.symmetricPadding(context, horizontal: 20),
-                      child: _buildLocationSection(context),
+                      child: _buildLocationSection(context, ref),
                     ),
                     
                     SizedBox(height: ResponsiveUtils.padding(context, 20)),
@@ -345,7 +346,7 @@ class TripDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildLocationSection(BuildContext context) {
+  Widget _buildLocationSection(BuildContext context, WidgetRef ref) {
     final kmsLabel = kms != null ? '$kms km' : '-- km';
 
     return Container(
@@ -406,7 +407,23 @@ class TripDetailsScreen extends ConsumerWidget {
                 SizedBox(height: ResponsiveUtils.padding(context, 8)),
                 GestureDetector(
                   onTap: () {
-                    // TODO: Open maps
+                    // Get the current duty from home provider for map display
+                    final homeState = ref.read(homeProvider);
+                    if (homeState.currentDuty != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TripMapScreen(
+                            duty: homeState.currentDuty!,
+                            driverPosition: homeState.driverPosition,
+                            onTripStarted: () {
+                              // Handle trip started if needed
+                              debugPrint('Trip started from map screen');
+                            },
+                          ),
+                        ),
+                      );
+                    }
                   },
                   child: Container(
                     padding: ResponsiveUtils.symmetricPadding(context, horizontal: 12, vertical: 6),

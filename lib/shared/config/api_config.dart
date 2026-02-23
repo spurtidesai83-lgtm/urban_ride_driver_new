@@ -35,6 +35,9 @@ class ApiConfig {
   static const String applyLeaveEndpoint = '$gatewayPrefix/api/driver/leave/apply';
   static const String leaveHistoryEndpoint = '$gatewayPrefix/api/driver/leave/history';
   
+  // Trip history endpoints
+  static const String allTripHistoryEndpoint = '$gatewayPrefix/api/driver/trips/all-trip-history';
+  
   // Timeout durations
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);

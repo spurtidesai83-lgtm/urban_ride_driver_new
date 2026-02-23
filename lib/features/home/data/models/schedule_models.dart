@@ -12,6 +12,22 @@ double _parseDouble(dynamic value) {
   return 0.0;
 }
 
+double _parseLatitude(dynamic value) {
+  final parsed = _parseDouble(value);
+  if (parsed < -90 || parsed > 90) {
+    return 0.0;
+  }
+  return parsed;
+}
+
+double _parseLongitude(dynamic value) {
+  final parsed = _parseDouble(value);
+  if (parsed < -180 || parsed > 180) {
+    return 0.0;
+  }
+  return parsed;
+}
+
 // Convert route name/number to route code format (e.g., "Route 101" -> "R-101")
 String _extractRouteCode(String routeNo) {
   if (routeNo.isEmpty) {
@@ -76,10 +92,10 @@ class StopModel {
       toCheckpoint: toCheckpoint,
       fromUqId: fromValue,
       toUqId: toValue,
-      fromLatitude: _parseDouble(json['fromLatitude']),
-      fromLongitude: _parseDouble(json['fromLongitude']),
-      toLatitude: _parseDouble(json['toLatitude']),
-      toLongitude: _parseDouble(json['toLongitude']),
+      fromLatitude: _parseLatitude(json['fromLatitude']),
+      fromLongitude: _parseLongitude(json['fromLongitude']),
+      toLatitude: _parseLatitude(json['toLatitude']),
+      toLongitude: _parseLongitude(json['toLongitude']),
       scheduledTime: json['arrivalTime'] ?? json['scheduledTime'] ?? '',
       loggedTime: json['departureTime'] ?? json['loggedTime'] ?? '',
     );

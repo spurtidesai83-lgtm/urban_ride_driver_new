@@ -102,6 +102,17 @@ class HomeRepository {
         // Convert trips to duties
         for (var trip in route.trips) {
           print('🔄 [HomeRepo]     Creating DutyModel with routeCode="${route.routeCode}"');
+          bool _isValidLatLng(double lat, double lng) {
+            return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+          }
+          final validFromStop = trip.stops.firstWhere(
+            (stop) => _isValidLatLng(stop.fromLatitude, stop.fromLongitude),
+            orElse: () => trip.stops.isNotEmpty ? trip.stops.first : StopModel(name: '', scheduledTime: '', loggedTime: ''),
+          );
+          final validToStop = trip.stops.reversed.firstWhere(
+            (stop) => _isValidLatLng(stop.toLatitude, stop.toLongitude),
+            orElse: () => trip.stops.isNotEmpty ? trip.stops.last : StopModel(name: '', scheduledTime: '', loggedTime: ''),
+          );
           final duty = DutyModel(
             dutyNo: route.scheduleDutyNo,
             route: route.routeNo,
@@ -119,10 +130,18 @@ class HomeRepository {
             tripNo: trip.id,
             fromUqId: trip.fromUqId,
             toUqId: trip.toUqId,
-            pickupLatitude: trip.stops.isNotEmpty ? trip.stops.first.fromLatitude : 0.0,
-            pickupLongitude: trip.stops.isNotEmpty ? trip.stops.first.fromLongitude : 0.0,
-            dropLatitude: trip.stops.isNotEmpty ? trip.stops.last.toLatitude : 0.0,
-            dropLongitude: trip.stops.isNotEmpty ? trip.stops.last.toLongitude : 0.0,
+            pickupLatitude: trip.stops.isNotEmpty && _isValidLatLng(validFromStop.fromLatitude, validFromStop.fromLongitude)
+              ? validFromStop.fromLatitude
+              : 0.0,
+            pickupLongitude: trip.stops.isNotEmpty && _isValidLatLng(validFromStop.fromLatitude, validFromStop.fromLongitude)
+              ? validFromStop.fromLongitude
+              : 0.0,
+            dropLatitude: trip.stops.isNotEmpty && _isValidLatLng(validToStop.toLatitude, validToStop.toLongitude)
+              ? validToStop.toLatitude
+              : 0.0,
+            dropLongitude: trip.stops.isNotEmpty && _isValidLatLng(validToStop.toLatitude, validToStop.toLongitude)
+              ? validToStop.toLongitude
+              : 0.0,
             stops: trip.stops.map((stop) => DutyStop(
               stopNumber: stop.name,
               location: stop.name,

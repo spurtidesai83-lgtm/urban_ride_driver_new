@@ -6,9 +6,13 @@ import '../../data/models/duty_model.dart';
 import '../providers/home_provider.dart';
 import '../widgets/draggable_map_button.dart';
 import '../widgets/map_view.dart';
+import '../widgets/multi_duty_map_view.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
+import '../../../profile/presentation/providers/vehicle_provider.dart';
 import 'package:urbandriver/features/profile/data/models/profile_model.dart';
+import 'package:urbandriver/features/profile/data/models/vehicle_model.dart';
 import '../../../activity/presentation/screens/trip_details_screen.dart';
+import '../../../activity/presentation/screens/trip_map_screen.dart';
 import '../../../profile/presentation/screens/vehicle_details_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -21,11 +25,31 @@ class HomeScreen extends ConsumerWidget {
     this.onMenuTap,
   });
 
+  String _profileInitials(String? fullName) {
+    final normalized = (fullName ?? '').trim();
+    if (normalized.isEmpty || normalized == '-') return '-';
+
+    final parts = normalized
+        .split(RegExp(r'[\s._-]+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) return '-';
+
+    final first = parts.first.substring(0, 1).toUpperCase();
+    final second = parts.length > 1
+        ? parts.last.substring(0, 1).toUpperCase()
+        : '';
+
+    return second.isEmpty ? first : '$first $second';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeState = ref.watch(homeProvider);
     final homeNotifier = ref.read(homeProvider.notifier);
     final profileAsync = ref.watch(profileProvider);
+    final vehicleAsync = ref.watch(vehicleProvider);
 
     return Column(
       children: [
@@ -147,14 +171,13 @@ class HomeScreen extends ConsumerWidget {
                   _buildActivityCards(homeState),
                   SizedBox(height: ResponsiveUtils.padding(context, 15)),
 
-                            // Vehicle Details Card - Show only when there are duties
-                            if (homeState.duties.isNotEmpty)
-                              profileAsync.when(
-                                data: (profile) => VehicleCard(profile: profile),
-                                loading: () => const SizedBox.shrink(),
-                                error: (_, __) => const SizedBox.shrink(),
-                              ),
-                                SizedBox(height: ResponsiveUtils.padding(context, 80)),
+                            // Vehicle Details Card - always show, even on OFF/no-duty days
+                            vehicleAsync.when(
+                              data: (vehicle) => VehicleCard(vehicle: vehicle),
+                              loading: () => const VehicleCard(),
+                              error: (error, stackTrace) => const VehicleCard(),
+                            ),
+                            SizedBox(height: ResponsiveUtils.padding(context, 80)),
                               ],
                             ),
                           ),
@@ -177,10 +200,20 @@ class HomeScreen extends ConsumerWidget {
   ) {
     return Stack(
       children: [
-        MapView(
-          currentDuty: homeState.currentDuty,
-          driverPosition: homeState.driverPosition,
-        ),
+        // Show all duties for the day with their routes
+        homeState.duties.isNotEmpty
+            ? MultiDutyMapView(
+                duties: homeState.duties,
+                driverPosition: homeState.driverPosition,
+                onDutyTapped: (duty) {
+                  // Optional: Show duty info or navigate to trip screen
+                  debugPrint('Tapped duty: ${duty.dutyNo}');
+                },
+              )
+            : MapView(
+                currentDuty: homeState.currentDuty,
+                driverPosition: homeState.driverPosition,
+              ),
         Positioned(
           top: 16,
           right: 16,
@@ -301,6 +334,38 @@ class HomeScreen extends ConsumerWidget {
                 _buildMapTimeChip(Icons.schedule, duty.closeTime, 'End'),
               ],
             ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TripMapScreen(
+                        duty: duty,
+                        driverPosition: homeState.driverPosition,
+                      ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFC200),
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Start Navigation',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -372,14 +437,59 @@ class HomeScreen extends ConsumerWidget {
             child: Container(
               width: 50,
               height: 50,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                image: DecorationImage(
-                  image: profile?.profileImageUrl != null
-                      ? NetworkImage(profile!.profileImageUrl!)
-                      : const AssetImage('assets/images/profile_photo.png') as ImageProvider,
-                  fit: BoxFit.cover,
-                ),
+              ),
+              child: ClipOval(
+                child: (profile?.profileImageUrl != null && profile!.profileImageUrl!.trim().isNotEmpty)
+                    ? Image.network(
+                        profile.profileImageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, error, stackTrace) => Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFFFFF4CC),
+                                Color(0xFFFFC200),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              _profileInitials(profile.name),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1F2937),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFFFFF4CC),
+                              Color(0xFFFFC200),
+                            ],
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _profileInitials(profile?.name),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -390,7 +500,7 @@ class HomeScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hello, ${profile?.name?.split(' ')[0] ?? 'Driver'}',
+                  'Hello, ${profile?.name.split(' ')[0] ?? 'Driver'}',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1380,8 +1490,13 @@ class HomeScreen extends ConsumerWidget {
 }
 
 class VehicleCard extends StatelessWidget {
-  final ProfileModel profile;
-  const VehicleCard({super.key, required this.profile});
+  final VehicleModel? vehicle;
+  const VehicleCard({super.key, this.vehicle});
+
+  String _displayValue(String? value) {
+    if (value == null || value.trim().isEmpty) return '-';
+    return value;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1397,14 +1512,21 @@ class VehicleCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFFCF0),
+              Color(0xFFFFF4CC),
+            ],
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFFFC200), width: 1.5),
+          border: Border.all(color: const Color(0xFFFFC200).withValues(alpha: 0.8), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withValues(alpha: 0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: const Color(0xFFFFC200).withValues(alpha: 0.18),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -1418,26 +1540,55 @@ class VehicleCard extends StatelessWidget {
                   "Today's Vehicle",
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF7C5A00),
                   ),
                 ),
-                Icon(Icons.directions_car, color: Colors.grey[400], size: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFFC200).withValues(alpha: 0.7)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.directions_car, color: Colors.orange[800], size: 14),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Details',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF7C5A00),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF4CC),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFFFE08A),
+                        Color(0xFFFFC200),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFFC200).withValues(alpha: 0.5)),
+                    border: Border.all(color: const Color(0xFFFFC200).withValues(alpha: 0.9)),
                   ),
                   child: Center(
-                    child: Icon(Icons.local_taxi, color: Colors.orange[800], size: 24),
+                    child: const Icon(Icons.local_taxi, color: Color(0xFF4B3A00), size: 24),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -1446,19 +1597,19 @@ class VehicleCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        profile.vehicleNumber ?? "DL 01 AB 1234",
+                        _displayValue(vehicle?.registrationNumber),
                         style: const TextStyle(
                           fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1F2937),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        profile.vehicleModel ?? "Maruti Swift Dzire",
+                        _displayValue(vehicle?.model),
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[600],
+                          color: Colors.grey[800],
                           fontWeight: FontWeight.w500,
                         ),
                       ),

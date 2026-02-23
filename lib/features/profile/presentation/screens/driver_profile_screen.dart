@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
 import '../../../auth/providers/auth_provider.dart';
@@ -8,6 +9,7 @@ import '../../../home/presentation/providers/home_provider.dart';
 import '../../../activity/presentation/providers/activity_provider.dart';
 import '../../data/models/profile_model.dart';
 import '../providers/profile_provider.dart';
+import '../providers/trip_history_provider.dart';
 import '../../../auth/screens/login.dart';
 import 'vehicle_documents_screen.dart';
 import 'ride_history_screen.dart';
@@ -28,13 +30,56 @@ class DriverProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
-  String _selectedMonth = 'January 2026';
-  final List<String> _months = [
-    'January 2026',
-    'December 2025',
-    'November 2025',
-    'October 2025',
-  ];
+  final ImagePicker _imagePicker = ImagePicker();
+  bool _isUploadingProfilePicture = false;
+
+  String _profileInitials(String name) {
+    final normalized = name.trim();
+    if (normalized.isEmpty || normalized == '-') {
+      return '-';
+    }
+
+    final parts = normalized
+        .split(RegExp(r'[\s._-]+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) {
+      return '-';
+    }
+
+    final first = parts.first.substring(0, 1).toUpperCase();
+    final second = parts.length > 1
+      ? parts.last.substring(0, 1).toUpperCase()
+        : '';
+
+    return second.isEmpty ? first : '$first $second';
+  }
+
+  Widget _buildInitialsAvatar(ProfileModel profile) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFF4CC),
+            Color(0xFFFFC200),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          _profileInitials(profile.name),
+          style: const TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1F2937),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _handleLogout(BuildContext context, WidgetRef ref) {
     showDialog(
@@ -238,6 +283,60 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     );
   }
 
+  Future<void> _pickAndUploadProfilePicture(WidgetRef ref) async {
+    if (_isUploadingProfilePicture) {
+      return;
+    }
+
+    try {
+      final pickedImage = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1200,
+      );
+
+      if (pickedImage == null) {
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _isUploadingProfilePicture = true;
+        });
+      }
+
+      await ref.read(profileProvider.notifier).uploadProfilePicture(pickedImage);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile picture updated successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to upload profile picture: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingProfilePicture = false;
+        });
+      }
+    }
+  }
+
   Widget _buildEmergencyContactItem(
     BuildContext context,
     String label,
@@ -329,13 +428,13 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
             children: [
               const SizedBox(height: 20),
               // Profile Header
-              _buildProfileHeader(context, profile),
+              _buildProfileHeader(context, profile, ref),
               const SizedBox(height: 24),
 
-              // Stats Bar
+              // Stats Bar with Trip History Data
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _buildStatsBar(context, profile),
+                child: _buildStatsBarWithTripHistory(context, profile, ref),
               ),
               const SizedBox(height: 24),
               const Divider(thickness: 8, color: Color(0xFFF9FAFB)), // Thick separator
@@ -351,32 +450,71 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     );
   }
 
-  Widget _buildProfileHeader(BuildContext context, ProfileModel profile) {
+  Widget _buildProfileHeader(BuildContext context, ProfileModel profile, WidgetRef ref) {
     return Column(
       children: [
         Stack(
           children: [
-            Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
+            GestureDetector(
+              onTap: () => _pickAndUploadProfilePicture(ref),
+              child: Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      (profile.profileImageUrl != null && profile.profileImageUrl!.trim().isNotEmpty)
+                          ? Image.network(
+                              profile.profileImageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, error, stackTrace) => _buildInitialsAvatar(profile),
+                            )
+                          : _buildInitialsAvatar(profile),
+                      if (_isUploadingProfilePicture)
+                        Container(
+                          color: Colors.black26,
+                          child: const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ],
+                ),
               ),
-              child: ClipOval(
-                child: profile.profileImageUrl != null
-                    ? Image.network(profile.profileImageUrl!, fit: BoxFit.cover)
-                    : Container(
-                        color: Colors.grey[200],
-                        child: Icon(Icons.person, size: 50, color: Colors.grey[400]),
-                      ),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              child: GestureDetector(
+                onTap: () => _pickAndUploadProfilePicture(ref),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFC200),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: const Icon(Icons.camera_alt, size: 12, color: Colors.black87),
+                ),
               ),
             ),
             if (profile.isVerified)
@@ -427,6 +565,54 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     );
   }
 
+  Widget _buildStatsBarWithTripHistory(BuildContext context, ProfileModel profile, WidgetRef ref) {
+    final tripHistoryAsync = ref.watch(tripHistoryProvider);
+
+    return tripHistoryAsync.when(
+      loading: () => _buildStatBarSkeleton(),
+      error: (err, stack) => _buildStatsBar(context, profile),
+      data: (tripHistory) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2)),
+          ],
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            _buildStatItem('Duties', tripHistory.totalNoOfDuties.toString()),
+            _buildVerticalDivider(),
+            _buildStatItem('KM', '${tripHistory.kmsTraveled.toStringAsFixed(1)}k'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatBarSkeleton() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2)),
+        ],
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          _buildStatItem('Duties', '-'),
+          _buildVerticalDivider(),
+          _buildStatItem('KM', '-'),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatsBar(BuildContext context, ProfileModel profile) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -434,9 +620,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-           BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0,2)),
+          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2)),
         ],
-        border: Border.all(color: Colors.grey[200]!)
+        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
         children: [
@@ -679,13 +865,13 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
           ),
           const SizedBox(height: 20),
           // Profile Header with empty data
-          _buildProfileHeader(context, emptyProfile),
+          _buildProfileHeader(context, emptyProfile, ref),
           const SizedBox(height: 24),
 
           // Stats Bar with empty data
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _buildStatsBar(context, emptyProfile),
+            child: _buildStatBarSkeleton(),
           ),
           const SizedBox(height: 24),
           const Divider(thickness: 8, color: Color(0xFFF9FAFB)),

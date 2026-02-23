@@ -7,12 +7,20 @@ import '../../../../shared/services/directions_service.dart';
 class MapView extends StatefulWidget {
   final DutyModel? currentDuty;
   final Position? driverPosition;
+  final bool tripStarted;
+  final bool navigationMode;
+  final List<LatLng> routeStops;
+  final List<String> routeStopLabels;
   final VoidCallback? onMapReady;
 
   const MapView({
     Key? key,
     this.currentDuty,
     this.driverPosition,
+    this.tripStarted = false,
+    this.navigationMode = false,
+    this.routeStops = const [],
+    this.routeStopLabels = const [],
     this.onMapReady,
   }) : super(key: key);
 
@@ -27,6 +35,14 @@ class _MapViewState extends State<MapView> {
   bool mapInitialized = false;
   final DirectionsService _directionsService = DirectionsService();
   bool isLoadingRoute = false;
+  DateTime? _lastRouteRefreshAt;
+  LatLng? _lastRouteRefreshOrigin;
+
+  bool _isValidLatLng(double lat, double lng) {
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  }
+
+  bool get _hasCustomRouteStops => widget.routeStops.length >= 2;
 
   @override
   void initState() {
@@ -77,49 +93,87 @@ class _MapViewState extends State<MapView> {
       );
     }
 
-    // Add pickup location marker
-    if (widget.currentDuty != null &&
-        widget.currentDuty!.pickupLatitude != 0 &&
-        widget.currentDuty!.pickupLongitude != 0) {
-      print('🟢 Adding pickup marker at ${widget.currentDuty!.pickupLatitude}, ${widget.currentDuty!.pickupLongitude}');
-      markers.add(
-        Marker(
-          markerId: const MarkerId('pickup_location'),
-          position: LatLng(
+    if (_hasCustomRouteStops) {
+      for (int index = 0; index < widget.routeStops.length; index++) {
+        final stop = widget.routeStops[index];
+        if (!_isValidLatLng(stop.latitude, stop.longitude)) {
+          continue;
+        }
+
+        final isFirst = index == 0;
+        final isLast = index == widget.routeStops.length - 1;
+        final title = widget.routeStopLabels.length > index
+            ? widget.routeStopLabels[index]
+            : 'Stop ${index + 1}';
+
+        markers.add(
+          Marker(
+            markerId: MarkerId('route_stop_$index'),
+            position: stop,
+            infoWindow: InfoWindow(
+              title: title,
+              snippet: isFirst
+                  ? 'Pickup'
+                  : isLast
+                      ? 'Drop'
+                      : 'Intermediate Stop',
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              isFirst
+                  ? BitmapDescriptor.hueGreen
+                  : isLast
+                      ? BitmapDescriptor.hueRed
+                      : BitmapDescriptor.hueOrange,
+            ),
+          ),
+        );
+      }
+    } else {
+      // Add pickup location marker
+      if (widget.currentDuty != null &&
+          _isValidLatLng(
             widget.currentDuty!.pickupLatitude,
             widget.currentDuty!.pickupLongitude,
+          )) {
+        print('🟢 Adding pickup marker at ${widget.currentDuty!.pickupLatitude}, ${widget.currentDuty!.pickupLongitude}');
+        markers.add(
+          Marker(
+            markerId: const MarkerId('pickup_location'),
+            position: LatLng(
+              widget.currentDuty!.pickupLatitude,
+              widget.currentDuty!.pickupLongitude,
+            ),
+            infoWindow: InfoWindow(
+              title: 'Pickup',
+              snippet: widget.currentDuty!.pickupAddress ?? widget.currentDuty!.from,
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           ),
-          infoWindow: InfoWindow(
-            title: 'Pickup',
-            snippet: widget.currentDuty!.pickupAddress ?? widget.currentDuty!.from,
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        ),
-      );
-    }
+        );
+      }
 
-    // Add drop location marker
-    if (widget.currentDuty != null &&
-        widget.currentDuty!.dropLatitude != 0 &&
-        widget.currentDuty!.dropLongitude != 0) {
-      print('🔴 Adding drop marker at ${widget.currentDuty!.dropLatitude}, ${widget.currentDuty!.dropLongitude}');
-      markers.add(
-        Marker(
-          markerId: const MarkerId('drop_location'),
-          position: LatLng(
+      // Add drop location marker
+      if (widget.currentDuty != null &&
+          _isValidLatLng(
             widget.currentDuty!.dropLatitude,
             widget.currentDuty!.dropLongitude,
+          )) {
+        print('🔴 Adding drop marker at ${widget.currentDuty!.dropLatitude}, ${widget.currentDuty!.dropLongitude}');
+        markers.add(
+          Marker(
+            markerId: const MarkerId('drop_location'),
+            position: LatLng(
+              widget.currentDuty!.dropLatitude,
+              widget.currentDuty!.dropLongitude,
+            ),
+            infoWindow: InfoWindow(
+              title: 'Drop-off',
+              snippet: widget.currentDuty!.dropAddress ?? widget.currentDuty!.to,
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           ),
-          infoWindow: InfoWindow(
-            title: 'Drop-off',
-            snippet: widget.currentDuty!.dropAddress ?? widget.currentDuty!.to,
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        ),
-      );
-
-      // Fetch road-based route from pickup to drop
-      // Route will be loaded asynchronously by _loadRoute()
+        );
+      }
     }
     
     print('✅ Markers initialized: ${markers.length} markers');
@@ -127,25 +181,100 @@ class _MapViewState extends State<MapView> {
   }
 
   Future<void> _loadRoute() async {
-    // Check if we have valid coordinates
-    if (widget.currentDuty == null ||
-        widget.currentDuty!.pickupLatitude == 0 ||
-        widget.currentDuty!.pickupLongitude == 0 ||
-        widget.currentDuty!.dropLatitude == 0 ||
-        widget.currentDuty!.dropLongitude == 0) {
-      print('⚠️ No valid coordinates for route');
+    if (_hasCustomRouteStops) {
+      setState(() => isLoadingRoute = true);
+      try {
+        final chainedRoute = <LatLng>[];
+
+        for (int index = 0; index < widget.routeStops.length - 1; index++) {
+          final origin = widget.routeStops[index];
+          final destination = widget.routeStops[index + 1];
+
+          if (!_isValidLatLng(origin.latitude, origin.longitude) ||
+              !_isValidLatLng(destination.latitude, destination.longitude)) {
+            continue;
+          }
+
+          final segment = await _directionsService.getDirections(
+            originLat: origin.latitude,
+            originLng: origin.longitude,
+            destLat: destination.latitude,
+            destLng: destination.longitude,
+          );
+
+          if (segment.isEmpty) {
+            continue;
+          }
+
+          if (chainedRoute.isEmpty) {
+            chainedRoute.addAll(segment);
+          } else {
+            chainedRoute.addAll(segment.skip(1));
+          }
+        }
+
+        if (mounted) {
+          polylines.clear();
+          if (chainedRoute.isNotEmpty) {
+            polylines.add(
+              Polyline(
+                polylineId: const PolylineId('route_stops_chain'),
+                points: chainedRoute,
+                color: Colors.blue,
+                width: 5,
+                geodesic: true,
+              ),
+            );
+          }
+          setState(() => isLoadingRoute = false);
+        }
+      } catch (e) {
+        print('❌ Error loading chained route: $e');
+        if (mounted) {
+          setState(() => isLoadingRoute = false);
+        }
+      }
       return;
     }
+
+    final duty = widget.currentDuty;
+    if (duty == null) {
+      print('⚠️ No duty available for route');
+      return;
+    }
+
+    final hasPickup = _isValidLatLng(duty.pickupLatitude, duty.pickupLongitude);
+    final hasDrop = _isValidLatLng(duty.dropLatitude, duty.dropLongitude);
+
+    if (!hasPickup && !hasDrop) {
+      print('⚠️ No valid destination coordinates for route');
+      return;
+    }
+
+    final destinationLat = widget.tripStarted
+        ? (hasDrop ? duty.dropLatitude : duty.pickupLatitude)
+        : (hasPickup ? duty.pickupLatitude : duty.dropLatitude);
+    final destinationLng = widget.tripStarted
+        ? (hasDrop ? duty.dropLongitude : duty.pickupLongitude)
+        : (hasPickup ? duty.pickupLongitude : duty.dropLongitude);
+
+    final hasDriver = widget.driverPosition != null;
+    final originLat = hasDriver
+        ? widget.driverPosition!.latitude
+        : (hasPickup ? duty.pickupLatitude : duty.dropLatitude);
+    final originLng = hasDriver
+        ? widget.driverPosition!.longitude
+        : (hasPickup ? duty.pickupLongitude : duty.dropLongitude);
 
     print('🛣️ Fetching road-based route...');
     setState(() => isLoadingRoute = true);
     
     try {
       final routePoints = await _directionsService.getDirections(
-        originLat: widget.currentDuty!.pickupLatitude,
-        originLng: widget.currentDuty!.pickupLongitude,
-        destLat: widget.currentDuty!.dropLatitude,
-        destLng: widget.currentDuty!.dropLongitude,
+        originLat: originLat,
+        originLng: originLng,
+        destLat: destinationLat,
+        destLng: destinationLng,
       );
       
       if (routePoints.isNotEmpty && mounted) {
@@ -182,11 +311,87 @@ class _MapViewState extends State<MapView> {
       });
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
-          _moveToShowAllMarkers();
+          if (widget.navigationMode && widget.driverPosition != null) {
+            _followDriverCamera(widget.driverPosition!);
+          } else {
+            _moveToShowAllMarkers();
+          }
         }
       });
     }
     widget.onMapReady?.call();
+  }
+
+  void _updateDriverMarkerOnly() {
+    final driverPosition = widget.driverPosition;
+    if (driverPosition == null) {
+      return;
+    }
+
+    markers.removeWhere((marker) => marker.markerId.value == 'driver_location');
+    markers.add(
+      Marker(
+        markerId: const MarkerId('driver_location'),
+        position: LatLng(driverPosition.latitude, driverPosition.longitude),
+        infoWindow: const InfoWindow(
+          title: 'Your Location',
+          snippet: 'Current position',
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+      ),
+    );
+  }
+
+  void _followDriverCamera(Position position) {
+    if (!mapInitialized) {
+      return;
+    }
+
+    final bearing = position.heading.isNaN || position.heading < 0
+        ? 0.0
+        : position.heading;
+
+    mapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(position.latitude, position.longitude),
+          zoom: 17,
+          tilt: 45,
+          bearing: bearing,
+        ),
+      ),
+    );
+  }
+
+  bool _shouldRefreshRouteForMovement(Position? oldPosition, Position? newPosition) {
+    if (newPosition == null) {
+      return false;
+    }
+
+    final now = DateTime.now();
+    if (_lastRouteRefreshAt != null &&
+        now.difference(_lastRouteRefreshAt!).inSeconds < 8) {
+      return false;
+    }
+
+    final lastOrigin = _lastRouteRefreshOrigin;
+    final oldOrigin = oldPosition;
+
+    final baseLat = lastOrigin?.latitude ?? oldOrigin?.latitude;
+    final baseLng = lastOrigin?.longitude ?? oldOrigin?.longitude;
+
+    if (baseLat == null || baseLng == null) {
+      return true;
+    }
+
+    final movedMeters = Geolocator.distanceBetween(
+      baseLat,
+      baseLng,
+      newPosition.latitude,
+      newPosition.longitude,
+    );
+
+    return movedMeters >= 35;
   }
 
   void _moveToShowAllMarkers() {
@@ -238,17 +443,51 @@ class _MapViewState extends State<MapView> {
   @override
   void didUpdateWidget(MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (mapInitialized &&
-        (oldWidget.driverPosition != widget.driverPosition ||
-            oldWidget.currentDuty != widget.currentDuty)) {
+    if (!mapInitialized) {
+      return;
+    }
+
+    final routeDataChanged =
+        oldWidget.currentDuty != widget.currentDuty ||
+        oldWidget.tripStarted != widget.tripStarted ||
+        oldWidget.routeStops != widget.routeStops ||
+        oldWidget.routeStopLabels != widget.routeStopLabels;
+
+    final driverPositionChanged = oldWidget.driverPosition != widget.driverPosition;
+    final navigationModeChanged = oldWidget.navigationMode != widget.navigationMode;
+
+    if (routeDataChanged || navigationModeChanged) {
       print('🔄 Widget updated, refreshing markers and route');
       _initializeMarkers();
       _loadRoute();
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && mapInitialized) {
-          _moveToShowAllMarkers();
+          if (widget.navigationMode && widget.driverPosition != null) {
+            _followDriverCamera(widget.driverPosition!);
+          } else {
+            _moveToShowAllMarkers();
+          }
         }
       });
+      return;
+    }
+
+    if (driverPositionChanged) {
+      _updateDriverMarkerOnly();
+      setState(() {});
+
+      if (widget.navigationMode && widget.driverPosition != null) {
+        _followDriverCamera(widget.driverPosition!);
+
+        if (_shouldRefreshRouteForMovement(oldWidget.driverPosition, widget.driverPosition)) {
+          _lastRouteRefreshAt = DateTime.now();
+          _lastRouteRefreshOrigin = LatLng(
+            widget.driverPosition!.latitude,
+            widget.driverPosition!.longitude,
+          );
+          _loadRoute();
+        }
+      }
     }
   }
 
@@ -291,7 +530,7 @@ class _MapViewState extends State<MapView> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),

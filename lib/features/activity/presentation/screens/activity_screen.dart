@@ -66,37 +66,6 @@ class ActivityScreen extends ConsumerWidget {
     return dates.reversed.toList();
   }
 
-  // Returns a Map where key is the Section Header and value is the list of trips
-  Map<String, List<TripModel>> _getGroupedTrips(List<TripModel> filteredTrips) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    
-    Map<String, List<TripModel>> grouped = {};
-
-    for (var trip in filteredTrips) {
-      String header;
-      if (trip.status == 'Live') {
-        header = 'Live'; 
-      } else if (trip.date.isAtSameMomentAs(today)) {
-        header = 'Today';
-      } else {
-        // Format: "8 Jan 2026"
-        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        final day = trip.date.day;
-        final month = months[trip.date.month - 1];
-        final year = trip.date.year;
-        header = '$day $month $year';
-      }
-
-      if (!grouped.containsKey(header)) {
-        grouped[header] = [];
-      }
-      grouped[header]!.add(trip);
-    }
-    
-    return grouped;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activityState = ref.watch(activityProvider);
@@ -127,9 +96,46 @@ class ActivityScreen extends ConsumerWidget {
   }
 
   Widget _buildTripsList(BuildContext context, ActivityState state, bool isClockedIn) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final filteredTrips = state.filteredTrips;
     final liveTrips = filteredTrips.where((trip) => trip.status == 'Live').toList();
     final nonLiveTrips = filteredTrips.where((trip) => trip.status != 'Live').toList();
+
+    if (state.activeTab == 'ongoing') {
+      if (liveTrips.isEmpty) {
+        return const Center(
+          child: Text(
+            'No ongoing trips',
+            style: TextStyle(color: Color(0xFF6F7277)),
+          ),
+        );
+      }
+
+      return ListView(
+        padding: ResponsiveUtils.customPadding(context, top: 10, bottom: 100),
+        children: [
+          Padding(
+            padding: ResponsiveUtils.customPadding(context, left: 24, top: 16, right: 24, bottom: 0),
+            child: Text(
+              'Live',
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: ResponsiveUtils.fontSize(context, 14),
+                fontWeight: FontWeight.bold,
+                height: 1.0,
+              ),
+            ),
+          ),
+          ...liveTrips.map(
+            (trip) => Padding(
+              padding: ResponsiveUtils.symmetricPadding(context, horizontal: 24),
+              child: _TripCard(trip: trip, isClockedIn: isClockedIn),
+            ),
+          ),
+        ],
+      );
+    }
 
     final tripsByDate = <DateTime, List<TripModel>>{};
     for (final trip in nonLiveTrips) {
@@ -174,6 +180,13 @@ class ActivityScreen extends ConsumerWidget {
         ],
         ...dateSections.map((date) {
           final sectionTrips = tripsByDate[date] ?? const <TripModel>[];
+          final hideTodayDayOffBecauseLive =
+              _isSameDate(date, today) && sectionTrips.isEmpty && liveTrips.isNotEmpty;
+
+          if (hideTodayDayOffBecauseLive) {
+            return const SizedBox.shrink();
+          }
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

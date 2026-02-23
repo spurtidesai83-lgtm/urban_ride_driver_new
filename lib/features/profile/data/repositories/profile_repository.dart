@@ -1,33 +1,47 @@
 import '../models/profile_model.dart';
+import 'package:image_picker/image_picker.dart';
+import '../models/api_profile_model.dart';
 import '../../../../shared/services/profile_api_service.dart';
 
 class ProfileRepository {
   final ProfileApiService _apiService = ProfileApiService();
 
+  ProfileModel _mapApiDataToProfile(ApiProfileData data) {
+    return ProfileModel(
+      name: data.fullName,
+      email: '',
+      phone: data.phoneNumber.toString(),
+      totalRides: 0,
+      dutiesDone: 0,
+      daysOfDuty: 0,
+      kmCovered: 0.0,
+      overtimeRate: 50.0,
+      isVerified: data.status == 'ACTIVE',
+      profileImageUrl: data.profilePicture,
+      vehicleNumber: null,
+      vehicleModel: null,
+    );
+  }
+
   Future<ProfileModel> getProfile() async {
     try {
       // Fetch profile from API
       final apiResponse = await _apiService.getProfile();
-      final data = apiResponse.data;
-      
+
       // Convert API response to ProfileModel
-      return ProfileModel(
-        name: data.fullName,
-        email: '', // Email not in API response, could be from storage
-        phone: data.phoneNumber.toString(),
-        totalRides: 0, // Not in current API response
-        dutiesDone: 0, // Not in current API response
-        daysOfDuty: 0, // Not in current API response
-        kmCovered: 0.0, // Not in current API response
-        overtimeRate: 50.0, // Default value
-        isVerified: data.status == 'ACTIVE',
-        profileImageUrl: data.profilePicture,
-        vehicleNumber: null, // Not in profile API
-        vehicleModel: null, // Not in profile API
-      );
+      return _mapApiDataToProfile(apiResponse.data);
     } catch (e) {
       // Throw error instead of returning mock data
       throw Exception('Failed to fetch profile: $e');
+    }
+  }
+
+  Future<ProfileModel> uploadProfilePicture(XFile imageFile) async {
+    try {
+      final updatedProfileData = await _apiService.uploadProfilePicture(imageFile);
+      return _mapApiDataToProfile(updatedProfileData);
+    } catch (e) {
+      throw Exception('Failed to upload profile picture: $e');
     }
   }
 

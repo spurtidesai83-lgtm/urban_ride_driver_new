@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
-import '../providers/map_state_provider.dart';
 import '../providers/pickup_provider.dart';
 import 'pickup_arrival_screen.dart';
 import 'full_map_screen.dart';
 import '../../../home/presentation/widgets/map_view.dart';
 import '../../../home/presentation/providers/home_provider.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class PickupNavigationScreen extends ConsumerWidget {
   const PickupNavigationScreen({super.key});
@@ -347,8 +346,8 @@ class PickupNavigationScreen extends ConsumerWidget {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Padding(
-        padding: ResponsiveUtils.symmetricPadding(context, horizontal: 12),
+      child: Container(
+        padding: ResponsiveUtils.symmetricPadding(context, horizontal: 4, vertical: 12),
         child: Row(
           children: List.generate(
             stops.length * 2 - 1,
@@ -356,28 +355,31 @@ class PickupNavigationScreen extends ConsumerWidget {
               if (index.isEven) {
                 // Stop index
                 final stopIndex = index ~/ 2;
+                final isPassed = currentStopIndex > stopIndex;
+                final isCurrent = currentStopIndex == stopIndex;
                 return _buildTimelineStop(
                   context,
-                  stops[stopIndex].stopNumber,
                   stops[stopIndex].location,
-                  currentStopIndex == stopIndex,
+                  isPassed,
+                  isCurrent,
+                  stopIndex == 0,
+                  stopIndex == stops.length - 1,
                 );
               } else {
                 // Line between stops
                 final lineIndex = index ~/ 2;
-                return Padding(
-                  padding: EdgeInsets.symmetric(horizontal: ResponsiveUtils.padding(context, 6)),
-                  child: SizedBox(
-                    width: ResponsiveUtils.scale(context, 28),
-                    child: Center(
-                      child: Container(
-                        height: ResponsiveUtils.scale(context, 3),
-                        decoration: BoxDecoration(
-                          color: currentStopIndex > lineIndex ? const Color(0xFFFFC200) : Colors.grey[300],
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
+                final isPassed = currentStopIndex > lineIndex;
+                return Container(
+                  width: ResponsiveUtils.scale(context, 40),
+                  height: ResponsiveUtils.scale(context, 4),
+                  margin: EdgeInsets.only(bottom: ResponsiveUtils.padding(context, 32)),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isPassed 
+                        ? [const Color(0xFFFFC200), const Color(0xFFFFC200)]
+                        : [Colors.grey[300]!, Colors.grey[300]!],
                     ),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 );
               }
@@ -388,52 +390,105 @@ class PickupNavigationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTimelineStop(BuildContext context, String number, String name, bool isActive) {
+  Widget _buildTimelineStop(
+    BuildContext context, 
+    String name, 
+    bool isPassed,
+    bool isCurrent,
+    bool isFirst,
+    bool isLast,
+  ) {
+    // Get abbreviated name (first 3-4 chars for better fit)
+    String displayName = name;
+    if (name.length > 5) {
+      // Try to abbreviate intelligently
+      displayName = name.substring(0, 4);
+    }
+    
+    Color dotColor;
+    Color textColor;
+    Color borderColor;
+    
+    if (isCurrent) {
+      dotColor = const Color(0xFFFFC200);
+      textColor = Colors.black;
+      borderColor = const Color(0xFFFFC200);
+    } else if (isPassed) {
+      dotColor = Colors.green;
+      textColor = Colors.green[700]!;
+      borderColor = Colors.green;
+    } else {
+      dotColor = Colors.grey[300]!;
+      textColor = Colors.grey[500]!;
+      borderColor = Colors.grey[300]!;
+    }
+
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
+        // Circle indicator
         Container(
-          width: ResponsiveUtils.scale(context, 40),
-          height: ResponsiveUtils.scale(context, 40),
+          width: ResponsiveUtils.scale(context, 48),
+          height: ResponsiveUtils.scale(context, 48),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isActive ? const Color(0xFFFFC200) : Colors.white,
+            color: isCurrent ? dotColor : Colors.white,
             border: Border.all(
-              color: isActive ? const Color(0xFFFFC200) : Colors.grey[300]!,
-              width: 3,
+              color: borderColor,
+              width: isCurrent ? 4 : 3,
             ),
-            boxShadow: isActive
+            boxShadow: isCurrent
                 ? [
                     BoxShadow(
-                      color: const Color(0xFFFFC200).withOpacity(0.3),
-                      blurRadius: 8,
-                      spreadRadius: 2,
+                      color: dotColor.withOpacity(0.4),
+                      blurRadius: 12,
+                      spreadRadius: 3,
                     )
                   ]
-                : [],
+                : isPassed
+                  ? [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.2),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      )
+                    ]
+                  : [],
           ),
-          alignment: Alignment.center,
-          child: Text(
-            number,
-            style: TextStyle(
-              fontSize: ResponsiveUtils.fontSize(context, 16),
-              fontWeight: FontWeight.bold,
-              color: isActive ? Colors.white : Colors.grey[600],
-            ),
-          ),
+          child: isPassed && !isCurrent
+              ? Icon(
+                  Icons.check,
+                  size: ResponsiveUtils.iconSize(context, 24),
+                  color: Colors.green,
+                )
+              : Center(
+                  child: Text(
+                    displayName,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: ResponsiveUtils.fontSize(context, isCurrent ? 12 : 11),
+                      fontWeight: isCurrent ? FontWeight.w900 : FontWeight.w700,
+                      color: isCurrent ? Colors.white : textColor,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
         ),
         SizedBox(height: ResponsiveUtils.padding(context, 8)),
-        SizedBox(
-          width: ResponsiveUtils.scale(context, 60),
+        // Full name below
+        Container(
+          constraints: BoxConstraints(
+            maxWidth: ResponsiveUtils.scale(context, 70),
+          ),
           child: Text(
             name,
             textAlign: TextAlign.center,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: ResponsiveUtils.fontSize(context, 11),
-              color: isActive ? Colors.black : Colors.grey[600],
-              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              fontSize: ResponsiveUtils.fontSize(context, 12),
+              color: textColor,
+              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w600,
             ),
           ),
         ),
@@ -539,8 +594,16 @@ class PickupNavigationScreen extends ConsumerWidget {
   }
 
   Widget _buildMapPreview(BuildContext context, WidgetRef ref) {
-    final mapState = ref.watch(mapStateProvider);
+    final pickupState = ref.watch(pickupProvider);
     final homeState = ref.watch(homeProvider);
+    final routeStops = pickupState.stops
+      .where((stop) => stop.latitude >= -90 && stop.latitude <= 90 && stop.longitude >= -180 && stop.longitude <= 180)
+      .map((stop) => LatLng(stop.latitude, stop.longitude))
+      .toList();
+    final routeStopLabels = pickupState.stops
+      .where((stop) => stop.latitude >= -90 && stop.latitude <= 90 && stop.longitude >= -180 && stop.longitude <= 180)
+      .map((stop) => stop.location)
+      .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,6 +669,8 @@ class PickupNavigationScreen extends ConsumerWidget {
                     child: MapView(
                       currentDuty: homeState.currentDuty,
                       driverPosition: homeState.driverPosition,
+                      routeStops: routeStops,
+                      routeStopLabels: routeStopLabels,
                     ),
                   ),
                   // Clickable overlay hint

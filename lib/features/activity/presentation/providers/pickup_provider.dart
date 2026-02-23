@@ -164,8 +164,8 @@ class PickupNotifier extends StateNotifier<PickupState> {
   // Load stops from a duty
   void loadStopsFromDuty(DutyModel? duty) {
     print('📦 [pickup_provider] loadStopsFromDuty called with: ${duty?.from} → ${duty?.to}');
-    if (duty == null || duty.stops.isEmpty) {
-      print('❌ [pickup_provider] Duty is null or has no stops!');
+    if (duty == null) {
+      print('❌ [pickup_provider] Duty is null!');
       state = PickupState(stops: []);
       return;
     }

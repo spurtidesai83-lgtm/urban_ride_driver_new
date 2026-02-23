@@ -170,7 +170,8 @@ class HomeNotifier extends StateNotifier<HomeState> {
       print('📊 Dashboard fetched: isClockedIn=${data.isClockedIn}, schedule=${data.schedule.length} items');
       
       // Update state with dashboard data
-      final today = DateTime.now();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
       final todayDuties = _repository.convertScheduleToDuties(data.schedule, today);
       print('📋 Converted ${todayDuties.length} duties from schedule');
       
@@ -230,7 +231,8 @@ class HomeNotifier extends StateNotifier<HomeState> {
       state = state.copyWith(isLoading: true);
       
       final scheduleResponse = await _repository.getTodaySchedule();
-      final today = DateTime.now();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
       final todayDuties = _repository.convertScheduleToDuties(scheduleResponse.data, today);
       
       state = state.copyWith(

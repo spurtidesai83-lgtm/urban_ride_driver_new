@@ -39,12 +39,15 @@ class ActivityState {
   List<TripModel> get filteredTrips {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    bool isSameDate(DateTime a, DateTime b) {
+      return a.year == b.year && a.month == b.month && a.day == b.day;
+    }
     
     // 1. Filter by tab
     List<TripModel> trips = [];
     switch (activeTab) {
       case 'scheduled':
-        trips = allTrips.where((t) => t.date.isAtSameMomentAs(today) && t.status != 'Live').toList();
+        trips = allTrips.where((t) => isSameDate(t.date, today) && t.status != 'Live').toList();
         break;
       case 'upcoming':
         trips = allTrips.where((t) => t.date.isAfter(today)).toList();
@@ -80,8 +83,12 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
 
   // Convert DutyModel to TripModel
   TripModel _dutyToTrip(DutyModel duty, {bool isLive = false}) {
+    final uniqueTripId = duty.tripNo != null
+        ? '${duty.dutyNo}_${duty.tripNo}'
+        : '${duty.dutyNo}_${duty.joiningTime}_${duty.from}_${duty.to}';
+
     return TripModel(
-      id: duty.dutyNo,
+      id: uniqueTripId,
       status: isLive ? 'Live' : (duty.isCompleted ? 'Completed' : 'Scheduled'),
       from: duty.from,
       to: duty.to,
@@ -143,15 +150,34 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
 
     if (liveTrip != null && liveTrip.isInProgress) {
       final normalizedDutyNo = liveTrip.dutyNo.trim().toUpperCase();
-      trips.removeWhere((trip) => trip.id.trim().toUpperCase() == normalizedDutyNo);
+      final normalizedTripNo = liveTrip.tripNo.toString().trim().toUpperCase();
+      trips.removeWhere((trip) {
+        final tripId = trip.id.trim().toUpperCase();
+        return tripId == normalizedTripNo ||
+            tripId == normalizedDutyNo ||
+            tripId.startsWith('${normalizedDutyNo}_');
+      });
       trips.insert(0, _liveTripToTrip(liveTrip));
       print('📺 [ActivityProvider] Live trip merged from API: ${liveTrip.tripNo}');
     } else if (isClockedIn && currentDutyIndex >= 0 && currentDutyIndex < duties.length) {
-      final fallbackDuty = duties[currentDutyIndex];
-      final fallbackTrip = _dutyToTrip(fallbackDuty, isLive: true);
-      trips.removeWhere((trip) => trip.id == fallbackTrip.id);
-      trips.insert(0, fallbackTrip);
-      print('📺 [ActivityProvider] Live trip fallback from current duty index');
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final todayDuties = duties.where((duty) =>
+          duty.date.year == today.year &&
+          duty.date.month == today.month &&
+          duty.date.day == today.day).toList();
+
+      if (todayDuties.isNotEmpty) {
+        final fallbackDuty = currentDutyIndex < todayDuties.length
+            ? todayDuties[currentDutyIndex]
+            : todayDuties.first;
+        final fallbackTrip = _dutyToTrip(fallbackDuty, isLive: true);
+        trips.removeWhere((trip) => trip.id == fallbackTrip.id);
+        trips.insert(0, fallbackTrip);
+        print('📺 [ActivityProvider] Live trip fallback from today duty');
+      } else {
+        print('📺 [ActivityProvider] Skipping live fallback: no today duties');
+      }
     }
 
     print('📺 [ActivityProvider] Converted to ${trips.length} trips');
