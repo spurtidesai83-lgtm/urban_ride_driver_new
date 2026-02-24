@@ -23,7 +23,7 @@ class ApiLeaveApplicationResponse {
 
 class ApiLeaveApplicationData {
   final String message;
-  final String success;
+  final bool success;
 
   ApiLeaveApplicationData({
     required this.message,
@@ -31,9 +31,18 @@ class ApiLeaveApplicationData {
   });
 
   factory ApiLeaveApplicationData.fromJson(Map<String, dynamic> json) {
+    // Handle case where 'success' might be a string 'true' or a boolean true
+    final successValue = json['success'];
+    bool parsedSuccess = false;
+    if (successValue is bool) {
+      parsedSuccess = successValue;
+    } else if (successValue is String) {
+      parsedSuccess = successValue.toLowerCase() == 'true';
+    }
+    
     return ApiLeaveApplicationData(
       message: json['message'] ?? '',
-      success: json['success'] ?? '',
+      success: parsedSuccess,
     );
   }
 }

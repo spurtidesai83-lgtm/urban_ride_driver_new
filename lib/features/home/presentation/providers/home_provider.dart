@@ -167,37 +167,53 @@ class HomeNotifier extends StateNotifier<HomeState> {
       
       final dashboard = await _repository.getDashboard();
       final data = dashboard.data;
-      print('📊 Dashboard fetched: isClockedIn=${data.isClockedIn}, schedule=${data.schedule.length} items');
       
       // Update state with dashboard data
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final todayDuties = _repository.convertScheduleToDuties(data.schedule, today);
-      print('📋 Converted ${todayDuties.length} duties from schedule');
+      // final now = DateTime.now();
+      // final today = DateTime(now.year, now.month, now.day);
+      
+      // Note: The dashboard's 'schedule' field might not be compatible with the new structured API models.
+      // We will rely on dedicated schedule endpoints for accurate duty lists.
+      List<DutyModel> todayDuties = []; 
+
+      // Fallback to dedicated today schedule endpoint to get accurate duties.
+      try {
+        final todaySchedule = await _repository.getTodaySchedule();
+        todayDuties = _repository.convertTodayScheduleToDuties(todaySchedule);
+        print('📋 Today schedule loaded ${todayDuties.length} duties');
+      } catch (e) {
+        print('⚠️ Today schedule fetch failed: $e');
+      }
       
       // If clock-in was manually set, don't override it from dashboard
       final newClockedInState = state.clockInManuallySet ? state.isClockedIn : data.isClockedIn;
       
-      // Use API duties only - no mock fallback
       final finalDuties = todayDuties;
-      print('📋 Loaded ${finalDuties.length} duties from API');
       
+      // Fetch weekly schedule and merge it with today's duties
+      final weeklyDuties = await _fetchWeeklyScheduleInBackground();
+
+      // Fetch tomorrow's schedule explicitly as requested
+      final tomorrowDuties = await _fetchTomorrowSchedule();
+      
+      // Combine and remove duplicates
+      var allDutiesCombined = _mergeAndDeduplicateDuties(finalDuties, weeklyDuties);
+      allDutiesCombined = _mergeAndDeduplicateDuties(allDutiesCombined, tomorrowDuties);
+
+      // 6. Update state once with all data
       state = state.copyWith(
         isLoading: false,
         isClockedIn: newClockedInState,
         totalTrips: data.noOfTrips,
         totalSteeringTime: data.steeringTime,
         totalKms: data.totalKms,
-        duties: finalDuties,
-        allDuties: finalDuties,
+        duties: finalDuties, // This is still today's duties for the main view
+        allDuties: allDutiesCombined, // This is the complete list for other features
         currentDutyIndex: 0,
-        allDutiesCompleted: finalDuties.isEmpty,
+        allDutiesCompleted: finalDuties.isEmpty, // Set completed if no duties for date
         errorMessage: null,
       );
-      print('🏠 [HomeProvider] Updated state with ${finalDuties.length} duties');
-      
-      // Fetch weekly schedule in the background
-      fetchWeeklySchedule();
+      print('🏠 [HomeProvider] Dashboard loaded. Today\'s duties: ${todayDuties.length}, Total unique duties: ${allDutiesCombined.length}');
     } catch (e) {
       // Show error to user - no mock data fallback
       print('❌ Dashboard fetch failed: $e');
@@ -225,62 +241,48 @@ class HomeNotifier extends StateNotifier<HomeState> {
     }
   }
 
-  // Fetch today's schedule from API
-  Future<void> fetchTodaySchedule() async {
+  /// Merges two lists of duties and removes duplicates based on dutyNo, tripNo AND date.
+  List<DutyModel> _mergeAndDeduplicateDuties(List<DutyModel> list1, List<DutyModel> list2) {
+    final combined = [...list1, ...list2];
+    final uniqueKeys = <String>{};
+    final uniqueDuties = <DutyModel>[];
+    for (final duty in combined) {
+      // Use a combination of dutyNo, tripNo and Date to identify unique trips
+      // Including date is crucial for recurring weekly schedules
+      final dateStr = '${duty.date.year}-${duty.date.month}-${duty.date.day}';
+      final key = '${duty.dutyNo}_${duty.tripNo}_$dateStr';
+      
+      if (uniqueKeys.add(key)) {
+        uniqueDuties.add(duty);
+      }
+    }
+    return uniqueDuties;
+  }
+
+  /// Fetches the weekly schedule without altering the main loading state.
+  Future<List<DutyModel>> _fetchWeeklyScheduleInBackground() async {
     try {
-      state = state.copyWith(isLoading: true);
-      
-      final scheduleResponse = await _repository.getTodaySchedule();
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final todayDuties = _repository.convertScheduleToDuties(scheduleResponse.data, today);
-      
-      state = state.copyWith(
-        isLoading: false,
-        duties: todayDuties,
-        allDuties: [...todayDuties, ...state.allDuties.where((d) => !_isSameDay(d.date, today))],
-        currentDutyIndex: 0,
-        errorMessage: null,
-      );
+      final scheduleResponse = await _repository.getWeeklySchedule();
+      final weeklyDuties = _repository.convertWeeklyScheduleToDuties(scheduleResponse);
+      print('📅 [HomeProvider] Weekly schedule fetched in background. Found ${weeklyDuties.length} duties.');
+      return weeklyDuties;
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      );
+      print('❌ [HomeProvider] Weekly schedule fetch failed: $e');
+      // Return an empty list on failure, don't block the UI or show an error
+      return [];
     }
   }
 
-  // Fetch weekly/tomorrow's schedule from API
-  Future<void> fetchWeeklySchedule() async {
+  /// Fetches tomorrow's schedule explicitly.
+  Future<List<DutyModel>> _fetchTomorrowSchedule() async {
     try {
-      state = state.copyWith(isLoading: true);
-      
-      final scheduleResponse = await _repository.getWeeklySchedule();
-      final weeklyDuties = _repository.convertWeeklyScheduleToDuties(scheduleResponse.data);
-      
-      // Replace all duties for the next week, keep today's duties
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final todayDuties = state.duties.where((d) => _isSameDay(d.date, today)).toList();
-      
-      state = state.copyWith(
-        isLoading: false,
-        allDuties: [...todayDuties, ...weeklyDuties],
-        errorMessage: null,
-      );
-      print('📅 [HomeProvider] Weekly schedule fetched and merged. Total duties: ${state.allDuties.length}');
+      final scheduleResponse = await _repository.getTomorrowSchedule();
+      final tomorrowDuties = _repository.convertTomorrowScheduleToDuties(scheduleResponse); // Uses same response type
+      print('📅 [HomeProvider] Tomorrow schedule fetched. Found ${tomorrowDuties.length} duties.');
+      return tomorrowDuties;
     } catch (e) {
-      print('❌ [HomeProvider] Weekly schedule fetch failed: $e');
-      String errorMsg = 'Failed to load weekly schedule';
-      if (e.toString().contains('SocketException') || e.toString().contains('Network')) {
-        errorMsg = 'Network error while loading schedule';
-      } else if (e.toString().contains('TimeoutException')) {
-        errorMsg = 'Schedule load timeout';
-      }
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: errorMsg,
-      );
+      print('❌ [HomeProvider] Tomorrow schedule fetch failed: $e');
+      return [];
     }
   }
 
@@ -301,7 +303,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
     state = state.copyWith(
       duties: dateDuties,
       currentDutyIndex: 0,
-      allDutiesCompleted: false,
+      allDutiesCompleted: dateDuties.isEmpty, // Set completed if no duties for date
     );
   }
 

@@ -15,6 +15,7 @@ class ApiConfig {
   static const String profileEndpoint = '$gatewayPrefix/api/driver/profile';
   static const String vehicleEndpoint = '$gatewayPrefix/api/driver/vehicle';
   static const String todayScheduleEndpoint = '$gatewayPrefix/api/driver/schdule/today';
+  static const String dailyScheduleEndpoint = '$gatewayPrefix/api/driver/schdule/tmrow';
   static const String weeklyScheduleEndpoint = '$gatewayPrefix/api/driver/schdule/weekly';
   static const String clockInEndpoint = '$gatewayPrefix/api/driver/clock-in';
   static const String clockOutEndpoint = '$gatewayPrefix/api/driver/clock-out';

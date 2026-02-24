@@ -22,7 +22,7 @@ class ApiProfileResponse {
 class ApiProfileData {
   final String iamUuid;
   final String fullName;
-  final int phoneNumber;
+  final String phoneNumber;
   final String? birthDate;
   final String? profilePicture;
   final String role;
@@ -47,10 +47,20 @@ class ApiProfileData {
   });
 
   factory ApiProfileData.fromJson(Map<String, dynamic> json) {
+    final name = (json['fullName'] ??
+            json['name'] ??
+            json['driverName'] ??
+            json['userName'] ??
+            '')
+        .toString();
+
+    final phone = (json['phoneNumber'] ?? json['phone'] ?? json['mobileNumber'] ?? '')
+        .toString();
+
     return ApiProfileData(
-      iamUuid: json['iamUuid'] ?? '',
-      fullName: json['fullName'] ?? '',
-      phoneNumber: json['phoneNumber'] ?? 0,
+      iamUuid: (json['iamUuid'] ?? json['id'] ?? '').toString(),
+      fullName: name,
+      phoneNumber: phone,
       birthDate: json['birthDate'],
       profilePicture: json['profilePicture'],
       role: json['role'] ?? '',

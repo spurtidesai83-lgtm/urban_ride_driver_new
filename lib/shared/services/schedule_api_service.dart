@@ -6,6 +6,7 @@ import '../../features/home/data/models/dashboard_models.dart';
 import '../../features/home/data/models/schedule_models.dart';
 import '../../features/home/data/models/clock_models.dart';
 import '../../features/activity/data/models/live_trip_model.dart';
+import '../../features/home/data/models/api_schedule_model.dart';
 
 class ScheduleApiService {
   // Get dashboard data
@@ -32,7 +33,7 @@ class ScheduleApiService {
   }
 
   // Get today's schedule
-  Future<ScheduleResponse> getTodaySchedule() async {
+  Future<ApiTodayScheduleResponse> getTodaySchedule() async {
     try {
       final token = await StorageService.getToken();
       final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.todayScheduleEndpoint));
@@ -44,7 +45,7 @@ class ScheduleApiService {
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
-        return ScheduleResponse.fromJson(jsonData);
+        return ApiTodayScheduleResponse.fromJson(jsonData);
       } else {
         final errorData = jsonDecode(response.body);
         throw Exception(errorData['message'] ?? 'Failed to fetch today\'s schedule');
@@ -54,8 +55,31 @@ class ScheduleApiService {
     }
   }
 
+  // Get tomorrow's schedule
+  Future<ApiTodayScheduleResponse> getTomorrowSchedule() async {
+    try {
+      final token = await StorageService.getToken();
+      final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.dailyScheduleEndpoint));
+      
+      final response = await http.get(
+        url,
+        headers: ApiConfig.getHeaders(token: token),
+      ).timeout(ApiConfig.connectTimeout);
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        return ApiTodayScheduleResponse.fromJson(jsonData);
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to fetch tomorrow\'s schedule');
+      }
+    } catch (e) {
+      throw Exception('Failed to get tomorrow\'s schedule: $e');
+    }
+  }
+
   // Get weekly/tomorrow's schedule
-  Future<WeeklyScheduleResponse> getWeeklySchedule() async {
+  Future<ApiWeeklyScheduleResponse> getWeeklySchedule() async {
     try {
       final token = await StorageService.getToken();
       final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.weeklyScheduleEndpoint));
@@ -67,7 +91,7 @@ class ScheduleApiService {
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
-        return WeeklyScheduleResponse.fromJson(jsonData);
+        return ApiWeeklyScheduleResponse.fromJson(jsonData);
       } else {
         final errorData = jsonDecode(response.body);
         throw Exception(errorData['message'] ?? 'Failed to fetch weekly schedule');

@@ -10,7 +10,7 @@ class ProfileRepository {
     return ProfileModel(
       name: data.fullName,
       email: '',
-      phone: data.phoneNumber.toString(),
+      phone: data.phoneNumber,
       totalRides: 0,
       dutiesDone: 0,
       daysOfDuty: 0,

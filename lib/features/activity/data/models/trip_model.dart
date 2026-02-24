@@ -26,4 +26,34 @@ class TripModel {
     this.kms,
     required this.buttonText,
   });
+
+  TripModel copyWith({
+    String? id,
+    String? status,
+    String? from,
+    String? to,
+    DateTime? date,
+    String? timeDisplay,
+    String? endTime,
+    String? tripType,
+    String? steeringTime,
+    String? restTime,
+    int? kms,
+    String? buttonText,
+  }) {
+    return TripModel(
+      id: id ?? this.id,
+      status: status ?? this.status,
+      from: from ?? this.from,
+      to: to ?? this.to,
+      date: date ?? this.date,
+      timeDisplay: timeDisplay ?? this.timeDisplay,
+      endTime: endTime ?? this.endTime,
+      tripType: tripType ?? this.tripType,
+      steeringTime: steeringTime ?? this.steeringTime,
+      restTime: restTime ?? this.restTime,
+      kms: kms ?? this.kms,
+      buttonText: buttonText ?? this.buttonText,
+    );
+  }
 }

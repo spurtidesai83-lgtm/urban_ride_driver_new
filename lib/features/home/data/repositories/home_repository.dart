@@ -3,6 +3,7 @@ import '../../../../shared/services/schedule_api_service.dart';
 import '../models/dashboard_models.dart';
 import '../models/schedule_models.dart';
 import '../models/clock_models.dart';
+import '../models/api_schedule_model.dart';
 
 class HomeRepository {
   final ScheduleApiService _apiService = ScheduleApiService();
@@ -17,7 +18,7 @@ class HomeRepository {
   }
 
   // Get today's schedule
-  Future<ScheduleResponse> getTodaySchedule() async {
+  Future<ApiTodayScheduleResponse> getTodaySchedule() async {
     try {
       return await _apiService.getTodaySchedule();
     } catch (e) {
@@ -25,8 +26,17 @@ class HomeRepository {
     }
   }
 
+  // Get tomorrow's schedule
+  Future<ApiTodayScheduleResponse> getTomorrowSchedule() async {
+    try {
+      return await _apiService.getTomorrowSchedule();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Get weekly/tomorrow's schedule
-  Future<WeeklyScheduleResponse> getWeeklySchedule() async {
+  Future<ApiWeeklyScheduleResponse> getWeeklySchedule() async {
     try {
       return await _apiService.getWeeklySchedule();
     } catch (e) {
@@ -77,127 +87,156 @@ class HomeRepository {
     }
   }
 
-  // Convert API schedule to DutyModel list
-  List<DutyModel> convertScheduleToDuties(Map<String, List<ScheduleItemModel>> schedule, DateTime date) {
+  // Convert API schedule from TODAY'S endpoint to DutyModel list
+  List<DutyModel> convertTodayScheduleToDuties(ApiTodayScheduleResponse todayResponse) {
     final duties = <DutyModel>[];
-    
-    print('🔄 [HomeRepo] Converting schedule with ${schedule.length} duty entries');
-    
-    schedule.forEach((dutyNo, scheduleItems) {
-      // Skip OFF entries - these represent days off, not actual duties
-      if (dutyNo.toUpperCase() == 'OFF') {
-        print('🔄 [HomeRepo] Skipping OFF entry for date');
-        return;
-      }
-      
-      print('🔄 [HomeRepo] Processing duty: $dutyNo with ${scheduleItems.length} schedule items');
-      
-      for (var item in scheduleItems) {
-        final route = item.routeId;
-        // Get serviceType and first trip's steering time
-        String? serviceType = route.serviceType.isNotEmpty ? route.serviceType : null;
-        String? steeringTime = route.trips.isNotEmpty ? route.trips.first.steering : null;
-        print('🔄 [HomeRepo]   Route: routeNo="${route.routeNo}", routeCode="${route.routeCode}", trips=${route.trips.length}');
-        
-        // Convert trips to duties
-        for (var trip in route.trips) {
-          print('🔄 [HomeRepo]     Creating DutyModel with routeCode="${route.routeCode}"');
-          bool _isValidLatLng(double lat, double lng) {
-            return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-          }
-          final validFromStop = trip.stops.firstWhere(
-            (stop) => _isValidLatLng(stop.fromLatitude, stop.fromLongitude),
-            orElse: () => trip.stops.isNotEmpty ? trip.stops.first : StopModel(name: '', scheduledTime: '', loggedTime: ''),
-          );
-          final validToStop = trip.stops.reversed.firstWhere(
-            (stop) => _isValidLatLng(stop.toLatitude, stop.toLongitude),
-            orElse: () => trip.stops.isNotEmpty ? trip.stops.last : StopModel(name: '', scheduledTime: '', loggedTime: ''),
-          );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    todayResponse.data.forEach((dutyKey, dutyList) {
+      if (dutyKey.toUpperCase() == 'OFF') return;
+
+      for (var apiDuty in dutyList) {
+        if (apiDuty.scheduleDetails == null) continue;
+        final details = apiDuty.scheduleDetails!;
+
+        for (var apiTrip in details.trips) {
           final duty = DutyModel(
-            dutyNo: route.scheduleDutyNo,
-            route: route.routeNo,
-            routeCode: route.routeCode,
-            from: trip.fromLocation,
-            to: trip.toLocation,
-            joiningTime: trip.startTime,
-            closeTime: trip.endTime,
+            dutyNo: details.scheduleDutyNo,
+            route: details.routeNo,
+            from: apiTrip.fromLocation,
+            to: apiTrip.toLocation,
+            joiningTime: apiTrip.startTime,
+            closeTime: apiTrip.endTime,
             isCompleted: false,
-            date: date,
-            serviceType: serviceType,
-            steeringTime: steeringTime,
-            restTime: trip.rest,
-            tripKms: trip.kms,
-            tripNo: trip.id,
-            fromUqId: trip.fromUqId,
-            toUqId: trip.toUqId,
-            pickupLatitude: trip.stops.isNotEmpty && _isValidLatLng(validFromStop.fromLatitude, validFromStop.fromLongitude)
-              ? validFromStop.fromLatitude
-              : 0.0,
-            pickupLongitude: trip.stops.isNotEmpty && _isValidLatLng(validFromStop.fromLatitude, validFromStop.fromLongitude)
-              ? validFromStop.fromLongitude
-              : 0.0,
-            dropLatitude: trip.stops.isNotEmpty && _isValidLatLng(validToStop.toLatitude, validToStop.toLongitude)
-              ? validToStop.toLatitude
-              : 0.0,
-            dropLongitude: trip.stops.isNotEmpty && _isValidLatLng(validToStop.toLatitude, validToStop.toLongitude)
-              ? validToStop.toLongitude
-              : 0.0,
-            stops: trip.stops.map((stop) => DutyStop(
-              stopNumber: stop.name,
-              location: stop.name,
-              uqId: stop.toUqId,
-              passengers: '0', // Not in API response
-              timeWindow: stop.scheduledTime,
-              distance: '0 km', // Not in API response
-              latitude: stop.toLatitude,
-              longitude: stop.toLongitude,
-            )).toList(),
+            date: today, // Today's schedule is always for today
+            serviceType: details.serviceType,
+            steeringTime: apiTrip.steering,
+            restTime: apiTrip.rest,
+            tripKms: int.tryParse(apiTrip.kms) ?? 0,
+            tripNo: apiTrip.id,
           );
           duties.add(duty);
-          print('🔄 [HomeRepo]     ✅ Duty created: ${duty.dutyNo}, Route=${duty.route}, RouteCode=${duty.routeCode}, ServiceType=${duty.serviceType}, Steering=${duty.steeringTime}');
         }
       }
     });
-    
-    print('🔄 [HomeRepo] Converted to ${duties.length} total duties');
     return duties;
   }
 
-  // Convert weekly schedule to DutyModel list using explicit dates
-  List<DutyModel> convertWeeklyScheduleToDuties(Map<String, Map<String, List<ScheduleItemModel>>> weeklyData) {
+  // Convert API schedule from TOMORROW'S endpoint to DutyModel list
+  List<DutyModel> convertTomorrowScheduleToDuties(ApiTodayScheduleResponse tomorrowResponse) {
     final duties = <DutyModel>[];
-    
-    print('📅 [HomeRepo] Converting weekly schedule for ${weeklyData.length} days');
-    
-    weeklyData.forEach((dateString, dutyMap) {
-      try {
-        final dateParts = dateString.split('-');
-        if (dateParts.length == 3) {
-          final scheduleDate = DateTime(
-            int.parse(dateParts[0]),
-            int.parse(dateParts[1]),
-            int.parse(dateParts[2]),
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+
+    // Check for explicit "OFF" key which means day off
+    if (tomorrowResponse.data.containsKey('OFF')) {
+      // Create a dummy duty to represent the day off
+      duties.add(DutyModel(
+        dutyNo: 'OFF',
+        route: 'Day Off',
+        from: '',
+        to: '',
+        joiningTime: '',
+        closeTime: '',
+        isCompleted: true,
+        date: tomorrow,
+        serviceType: 'OFF', // Special marker
+        tripNo: 0,
+      ));
+      return duties;
+    }
+
+    tomorrowResponse.data.forEach((dutyKey, dutyList) {
+      if (dutyKey.toUpperCase() == 'OFF') return;
+
+      for (var apiDuty in dutyList) {
+        if (apiDuty.scheduleDetails == null) continue;
+        final details = apiDuty.scheduleDetails!;
+
+        for (var apiTrip in details.trips) {
+          final duty = DutyModel(
+            dutyNo: details.scheduleDutyNo,
+            route: details.routeNo,
+            from: apiTrip.fromLocation,
+            to: apiTrip.toLocation,
+            joiningTime: apiTrip.startTime,
+            closeTime: apiTrip.endTime,
+            isCompleted: false,
+            date: tomorrow, // Tomorrow's schedule
+            serviceType: details.serviceType,
+            steeringTime: apiTrip.steering,
+            restTime: apiTrip.rest,
+            tripKms: int.tryParse(apiTrip.kms) ?? 0,
+            tripNo: apiTrip.id,
           );
-          
-          print('📅 [HomeRepo] Processing date: $dateString with ${dutyMap.length} duty sets');
-          
-          // Reuse convertScheduleToDuties for each day
-          final dailyDuties = convertScheduleToDuties(dutyMap, scheduleDate);
-          duties.addAll(dailyDuties);
+          duties.add(duty);
         }
-      } catch (e) {
-        print('⚠️ [HomeRepo] Error processing schedule for $dateString: $e');
       }
     });
+    return duties;
+  }
 
-    // Sort duties by date and joining time
-    duties.sort((a, b) {
-      final dateCompare = a.date.compareTo(b.date);
-      if (dateCompare != 0) return dateCompare;
-      return a.joiningTime.compareTo(b.joiningTime);
-    });
-    
-    print('📅 [HomeRepo] Converted to ${duties.length} total duties from weekly schedule');
+  // Convert API schedule from WEEKLY endpoint to DutyModel list
+  List<DutyModel> convertWeeklyScheduleToDuties(ApiWeeklyScheduleResponse weeklyResponse) {
+    final duties = <DutyModel> [];
+
+    for (var dayData in weeklyResponse.data) {
+      dayData.forEach((dateString, scheduleMap) {
+        DateTime? scheduleDate;
+        try {
+          scheduleDate = DateTime.parse(dateString);
+        } catch (e) {
+          print('Error parsing date: $dateString');
+          return; // Skip this entry if date is invalid
+        }
+
+        // Check for Explicit OFF day in weekly schedule
+        if (scheduleMap.containsKey('OFF')) {
+          duties.add(DutyModel(
+            dutyNo: 'OFF',
+            route: 'Day Off',
+            from: '',
+            to: '',
+            joiningTime: '',
+            closeTime: '',
+            isCompleted: true,
+            date: scheduleDate!,
+            serviceType: 'OFF',
+            tripNo: 0,
+          ));
+          return; // No other duties for this day if it's OFF
+        }
+
+        scheduleMap.forEach((dutyKey, dutyList) {
+          if (dutyKey.toUpperCase() == 'OFF') return;
+
+          for (var apiDuty in dutyList) {
+            if (apiDuty.scheduleDetails == null) continue;
+            final details = apiDuty.scheduleDetails!;
+
+            for (var apiTrip in details.trips) {
+              final duty = DutyModel(
+                dutyNo: details.scheduleDutyNo,
+                route: details.routeNo,
+                from: apiTrip.fromLocation,
+                to: apiTrip.toLocation,
+                joiningTime: apiTrip.startTime,
+                closeTime: apiTrip.endTime,
+                isCompleted: false,
+                date: scheduleDate!, // Use the date from the weekly schedule
+                serviceType: details.serviceType,
+                steeringTime: apiTrip.steering,
+                restTime: apiTrip.rest,
+                tripKms: int.tryParse(apiTrip.kms) ?? 0,
+                tripNo: apiTrip.id,
+              );
+              duties.add(duty);
+            }
+          }
+        });
+      });
+    }
     return duties;
   }
 

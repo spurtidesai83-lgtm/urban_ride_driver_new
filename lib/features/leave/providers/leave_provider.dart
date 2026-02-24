@@ -51,6 +51,29 @@ class LeaveNotifier extends StateNotifier<LeaveState> {
       final response = await _leaveApiService.getLeaveHistory();
       if (response.success) {
         final leaveRecords = response.data.toLeaveRecords();
+        
+        // Custom sort:
+        // 1. Future/Upcoming leaves first (Ascending order - Earliest upcoming first)
+        // 2. Past/Old leaves below (Descending order - Most recent past first)
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+
+        leaveRecords.sort((a, b) {
+          final aIsFuture = !a.leaveFrom.isBefore(today);
+          final bIsFuture = !b.leaveFrom.isBefore(today);
+
+          if (aIsFuture && !bIsFuture) return -1; // Future comes first
+          if (!aIsFuture && bIsFuture) return 1;  // Past comes after
+
+          if (aIsFuture) {
+            // Both are future: Show earliest upcoming date first (Ascending)
+            return a.leaveFrom.compareTo(b.leaveFrom);
+          } else {
+            // Both are past: Show most recent past date first (Descending)
+            return b.leaveFrom.compareTo(a.leaveFrom);
+          }
+        });
+        
         state = state.copyWith(
           leaveHistory: leaveRecords,
           isLoading: false,

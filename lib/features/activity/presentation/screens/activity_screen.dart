@@ -44,6 +44,19 @@ class ActivityScreen extends ConsumerWidget {
     }
 
     DateTime startDate;
+    DateTime endDate = today;
+
+    // Find the latest trip date to extend the range if needed
+    if (trips.isNotEmpty) {
+      final lastTripDate = trips
+          .map((trip) => _normalizeDate(trip.date))
+          .reduce((a, b) => a.isAfter(b) ? a : b);
+      
+      if (lastTripDate.isAfter(endDate)) {
+        endDate = lastTripDate;
+      }
+    }
+
     if (timeFilter == 'This Month') {
       startDate = DateTime(today.year, today.month, 1);
     } else if (timeFilter == 'This Year') {
@@ -57,13 +70,19 @@ class ActivityScreen extends ConsumerWidget {
       startDate = normalizedTripDates.first;
     }
 
+    // Ensure start date isn't after end date (can happen if no trips and logic above)
+    if (startDate.isAfter(endDate)) {
+      endDate = startDate;
+    }
+
     final dates = <DateTime>[];
     for (DateTime cursor = startDate;
-        !cursor.isAfter(today);
+        !cursor.isAfter(endDate);
         cursor = cursor.add(const Duration(days: 1))) {
       dates.add(cursor);
     }
-    return dates.reversed.toList();
+    // Return in ascending order (Oldest -> Newest) as requested
+    return dates;
   }
 
   @override
@@ -202,13 +221,18 @@ class ActivityScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (sectionTrips.isEmpty)
+              if ((sectionTrips.any((t) => t.status == 'OFF') || sectionTrips.isEmpty) && !state.isLoading)
                 Padding(
                   padding: ResponsiveUtils.symmetricPadding(context, horizontal: 24),
                   child: _DayOffCard(date: date),
                 )
+              else if (state.isLoading && sectionTrips.isEmpty)
+                const Center(child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(),
+                ))
               else
-                ...sectionTrips.map(
+                ...sectionTrips.where((t) => t.status != 'OFF').map(
                   (trip) => Padding(
                     padding: ResponsiveUtils.symmetricPadding(context, horizontal: 24),
                     child: _TripCard(trip: trip, isClockedIn: isClockedIn),
