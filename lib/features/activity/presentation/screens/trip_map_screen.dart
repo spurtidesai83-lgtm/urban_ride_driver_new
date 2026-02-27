@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import '../../../home/data/models/duty_model.dart';
 import '../../../home/presentation/widgets/map_view.dart';
+import '../../presentation/providers/pickup_provider.dart';
 
 class TripMapScreen extends ConsumerStatefulWidget {
   final DutyModel duty;
@@ -30,6 +31,7 @@ class _TripMapScreenState extends ConsumerState<TripMapScreen> {
   StreamSubscription<Position>? _positionSubscription;
 
   bool _isValidLatLng(double lat, double lng) {
+    if (lat == 0.0 && lng == 0.0) return false;
     return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
   }
 
@@ -67,12 +69,19 @@ class _TripMapScreenState extends ConsumerState<TripMapScreen> {
     super.initState();
     _liveDriverPosition = widget.driverPosition;
     _startLocationTracking();
+    Future.microtask(() {
+      ref.read(pickupProvider.notifier).loadStopsFromDuty(widget.duty);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final pickupState = ref.watch(pickupProvider);
     final routeStops = _getRouteStops();
     final routeStopLabels = _getRouteStopLabels();
+    final currentStop = pickupState.currentStop;
+    final completedStops = pickupState.stops.where((s) => s.isPickedUp).toList();
+    final nextStop = currentStop;
     
     return Scaffold(
       body: Stack(
@@ -117,14 +126,14 @@ class _TripMapScreenState extends ConsumerState<TripMapScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            child: _buildTripInfoCard(context),
+            child: _buildTripInfoCard(context, pickupState, nextStop, completedStops),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTripInfoCard(BuildContext context) {
+  Widget _buildTripInfoCard(BuildContext context, PickupState pickupState, PickupStop? nextStop, List<PickupStop> completedStops) {
     final mediaQuery = MediaQuery.of(context);
 
     return ConstrainedBox(
@@ -242,6 +251,53 @@ class _TripMapScreenState extends ConsumerState<TripMapScreen> {
               // Time Details
               const Divider(thickness: 1),
               const SizedBox(height: 12),
+
+              if (completedStops.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: completedStops.map((stop) => ListTile(
+                    leading: const Icon(Icons.check_circle, color: Colors.green),
+                    title: Text(stop.location),
+                    subtitle: const Text('Completed'),
+                  )).toList(),
+                ),
+
+              if (nextStop != null)
+                Card(
+                  color: Colors.yellow[50],
+                  child: ListTile(
+                    leading: const Icon(Icons.location_on, color: Colors.orange),
+                    title: Text(nextStop.location),
+                    subtitle: Text('Pickup Window: ${nextStop.timeWindow}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!nextStop.isArrived)
+                          ElevatedButton(
+                            onPressed: () {
+                              ref.read(pickupProvider.notifier).markArrived();
+                            },
+                            child: const Text('Arrive'),
+                          ),
+                        if (nextStop.isArrived && !nextStop.isPickedUp)
+                          ElevatedButton(
+                            onPressed: () {
+                              ref.read(pickupProvider.notifier).markPickedUp();
+                            },
+                            child: const Text('Mark Picked Up'),
+                          ),
+                        if (nextStop.isPickedUp)
+                          const Icon(Icons.check, color: Colors.green),
+                      ],
+                    ),
+                  ),
+                ),
+
+              if (pickupState.allStopsCompleted)
+                const Center(
+                  child: Text('All stops completed!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                ),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

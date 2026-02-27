@@ -405,60 +405,75 @@ class _TabBar extends StatelessWidget {
   }
 }
 
-class _TripCard extends StatelessWidget {
+class _TripCard extends ConsumerWidget {
   final TripModel trip;
   final bool isClockedIn;
 
   const _TripCard({
     required this.trip,
     required this.isClockedIn,
-  });
-
-  void _navigateToDetails(BuildContext context) {
-    if (trip.buttonText == 'View Details') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TripDetailsScreen(
-            tripId: trip.id,
-            from: trip.from,
-            to: trip.to,
-            tripType: trip.tripType,
-            reportingTime: trip.timeDisplay,
-            tripStartTime: trip.timeDisplay,
-            estimatedEndTime: trip.endTime,
-            restTime: trip.restTime,
-            kms: trip.kms,
-          ),
-        ),
-      );
-    } else if (trip.buttonText == 'View Live') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TripDetailsScreen(
-            from: trip.from,
-            to: trip.to,
-            tripType: trip.tripType,
-            reportingTime: trip.timeDisplay,
-            tripStartTime: trip.timeDisplay,
-            estimatedEndTime: trip.endTime,
-            restTime: trip.restTime,
-            kms: trip.kms,
-            isLiveTrip: true,
-          ),
-        ),
-      );
-    }
-  }
+    Key? key,
+  }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final homeState = ref.watch(homeProvider);
+    final dutyList = homeState.allDuties.where(
+      (d) => d.dutyNo == trip.id.split('_').first &&
+              d.date.year == trip.date.year &&
+              d.date.month == trip.date.month &&
+              d.date.day == trip.date.day,
+    ).toList();
+    final duty = dutyList.isNotEmpty ? dutyList.first : null;
+    final stops = duty?.stops;
+
+    void _navigateToDetails() {
+      if (trip.buttonText == 'View Details') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TripDetailsScreen(
+              tripId: trip.id,
+              from: trip.from,
+              to: trip.to,
+              tripType: trip.tripType,
+              reportingTime: trip.timeDisplay,
+              tripStartTime: trip.startTime,
+              estimatedEndTime: trip.endTime,
+              restTime: trip.restTime,
+              kms: trip.kms,
+              duty: duty,
+              stops: stops,
+            ),
+          ),
+        );
+      } else if (trip.buttonText == 'View Live') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TripDetailsScreen(
+              from: trip.from,
+              to: trip.to,
+              tripType: trip.tripType,
+              reportingTime: trip.timeDisplay,
+              tripStartTime: trip.startTime,
+              estimatedEndTime: trip.endTime,
+              restTime: trip.restTime,
+              kms: trip.kms,
+              isLiveTrip: true,
+              duty: duty,
+              stops: stops,
+            ),
+          ),
+        );
+      }
+    }
+
     final isLive = trip.buttonText == 'View Live';
     final actionColor = isLive ? const Color(0xFF27AE60) : Colors.black;
 
     return GestureDetector(
-      onTap: () => _navigateToDetails(context),
+      onTap: _navigateToDetails,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(

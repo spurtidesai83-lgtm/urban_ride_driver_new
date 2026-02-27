@@ -115,6 +115,20 @@ class HomeRepository {
             restTime: apiTrip.rest,
             tripKms: int.tryParse(apiTrip.kms) ?? 0,
             tripNo: apiTrip.id,
+            stops: apiTrip.stops.map((s) => DutyStop(
+              stopNumber: '',
+              location: s.name,
+              uqId: s.toUqId,
+              passengers: '',
+              timeWindow: s.scheduledTime,
+              distance: '',
+              latitude: s.toLatitude,
+              longitude: s.toLongitude,
+            )).toList(),
+            pickupLatitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.first.fromLatitude : 0.0,
+            pickupLongitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.first.fromLongitude : 0.0,
+            dropLatitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.last.toLatitude : 0.0,
+            dropLongitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.last.toLongitude : 0.0,
           );
           duties.add(duty);
         }
@@ -169,6 +183,20 @@ class HomeRepository {
             restTime: apiTrip.rest,
             tripKms: int.tryParse(apiTrip.kms) ?? 0,
             tripNo: apiTrip.id,
+            stops: apiTrip.stops.map((s) => DutyStop(
+              stopNumber: '',
+              location: s.name,
+              uqId: s.toUqId,
+              passengers: '',
+              timeWindow: s.scheduledTime,
+              distance: '',
+              latitude: s.toLatitude,
+              longitude: s.toLongitude,
+            )).toList(),
+            pickupLatitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.first.fromLatitude : 0.0,
+            pickupLongitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.first.fromLongitude : 0.0,
+            dropLatitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.last.toLatitude : 0.0,
+            dropLongitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.last.toLongitude : 0.0,
           );
           duties.add(duty);
         }
@@ -230,6 +258,20 @@ class HomeRepository {
                 restTime: apiTrip.rest,
                 tripKms: int.tryParse(apiTrip.kms) ?? 0,
                 tripNo: apiTrip.id,
+                stops: apiTrip.stops.map((s) => DutyStop(
+                  stopNumber: '',
+                  location: s.name,
+                  uqId: s.toUqId,
+                  passengers: '',
+                  timeWindow: s.scheduledTime,
+                  distance: '',
+                  latitude: s.toLatitude,
+                  longitude: s.toLongitude,
+                )).toList(),
+                pickupLatitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.first.fromLatitude : 0.0,
+                pickupLongitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.first.fromLongitude : 0.0,
+                dropLatitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.last.toLatitude : 0.0,
+                dropLongitude: apiTrip.stops.isNotEmpty ? apiTrip.stops.last.toLongitude : 0.0,
               );
               duties.add(duty);
             }

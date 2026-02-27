@@ -96,6 +96,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
         to: '',
         date: duty.date,
         timeDisplay: '',
+        startTime: '',
         endTime: '',
         tripType: 'Day Off',
         steeringTime: '00:00',
@@ -113,7 +114,8 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
       from: duty.from,
       to: duty.to,
       date: duty.date,
-      timeDisplay: duty.joiningTime,
+      timeDisplay: duty.reportingTime,
+      startTime: duty.joiningTime,
       endTime: duty.closeTime,
       tripType: duty.serviceType ?? 'Shared Cab', // From backend or default
       steeringTime: duty.steeringTime ?? duty.joiningTime, // Use steering time or fall back to joining time
@@ -133,7 +135,8 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
       from: liveTrip.fromLocation,
       to: liveTrip.toLocation,
       date: liveTrip.tripDate ?? fallbackDate,
-      timeDisplay: liveTrip.startTime,
+      timeDisplay: liveTrip.reportingTime,
+      startTime: liveTrip.startTime,
       endTime: liveTrip.endTime,
       tripType: 'Live Trip',
       steeringTime: liveTrip.steering,
@@ -236,7 +239,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     final today = DateTime(now.year, now.month, now.day);
 
     // Update the live trip with new duty data
-    final updatedTrips = state.allTrips.map((trip) {
+    final List<TripModel> updatedTrips = state.allTrips.map((trip) {
       if (trip.status == 'Live') {
         return TripModel(
           id: trip.id,
@@ -244,7 +247,8 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
           from: duty.from,
           to: duty.to,
           date: today,
-          timeDisplay: duty.joiningTime,
+          timeDisplay: duty.reportingTime,
+          startTime: duty.joiningTime,
           endTime: duty.closeTime,
           tripType: duty.serviceType ?? 'Shared Cab',
           steeringTime: duty.steeringTime ?? duty.joiningTime,

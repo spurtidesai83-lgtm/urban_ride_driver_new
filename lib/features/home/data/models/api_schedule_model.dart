@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:urbandriver/features/home/data/models/schedule_models.dart';
 
 // Main response for Today's Schedule API (/api/driver/schdule/today)
 class ApiTodayScheduleResponse {
@@ -138,6 +139,7 @@ class ApiTrip {
   final String endTime;
   final String steering;
   final String rest;
+  final List<StopModel> stops;
 
   ApiTrip({
     required this.id,
@@ -148,6 +150,7 @@ class ApiTrip {
     required this.endTime,
     required this.steering,
     required this.rest,
+    this.stops = const [],
   });
 
   factory ApiTrip.fromJson(Map<String, dynamic> json) {
@@ -160,6 +163,10 @@ class ApiTrip {
       endTime: json['endTime'] ?? '',
       steering: json['steering'] ?? '00:00',
       rest: json['rest'] ?? '00:00',
+      stops: (json['stops'] as List<dynamic>?)
+              ?.map((stop) => StopModel.fromJson(stop))
+              .toList() ??
+          [],
     );
   }
 }

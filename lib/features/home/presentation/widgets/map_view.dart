@@ -39,6 +39,7 @@ class _MapViewState extends State<MapView> {
   LatLng? _lastRouteRefreshOrigin;
 
   bool _isValidLatLng(double lat, double lng) {
+    if (lat == 0.0 && lng == 0.0) return false;
     return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
   }
 

@@ -114,9 +114,28 @@ class AuthRepository {
     try {
       // Check if token exists in storage
       final token = await StorageService.getToken();
-      return token != null && token.isNotEmpty;
+      if (token == null || token.isEmpty) {
+        return false;
+      }
+
+      try {
+        // Verify token with backend
+        final validationResponse = await _authApiService.validateToken();
+
+        if (validationResponse.valid) {
+          return true;
+        } else {
+          await signOut();
+          return false;
+        }
+      } catch (e) {
+        // Backend/network issue: keep user logged in if a token exists locally.
+        print('⚠️ Token validation API unavailable, using local token fallback: $e');
+        return true;
+      }
     } catch (e) {
-      throw Exception('Failed to validate token: $e');
+      print('Error validating token: $e');
+      return false;
     }
   }
 

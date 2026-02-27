@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 class DutyStop {
   final String stopNumber;
   final String location;
@@ -121,5 +123,41 @@ class DutyModel {
       fromUqId: fromUqId ?? this.fromUqId,
       toUqId: toUqId ?? this.toUqId,
     );
+  }
+
+  String get reportingTime {
+    if (joiningTime.isEmpty) return '';
+    try {
+      String timeStr = joiningTime.trim().toUpperCase();
+
+      final now = DateTime.now();
+      DateTime date;
+
+      if (timeStr.contains('AM') || timeStr.contains('PM')) {
+        if (timeStr.indexOf(':') == 1) {
+           timeStr = '0$timeStr';
+        }
+
+        final format = DateFormat('hh:mm a');
+        final parsedTime = format.parse(timeStr);
+        date = DateTime(now.year, now.month, now.day, parsedTime.hour, parsedTime.minute);
+      }
+      else {
+        List<String> parts = timeStr.split(':');
+        int hour = int.parse(parts[0]);
+        int minute = int.parse(parts[1]);
+        date = DateTime(now.year, now.month, now.day, hour, minute);
+      }
+
+      final reportingDate = date.subtract(const Duration(minutes: 15));
+
+      if (joiningTime.toUpperCase().contains('AM') || joiningTime.toUpperCase().contains('PM')) {
+        return DateFormat('h:mm a').format(reportingDate);
+      } else {
+        return DateFormat('HH:mm').format(reportingDate);
+      }
+    } catch (e) {
+      return joiningTime;
+    }
   }
 }

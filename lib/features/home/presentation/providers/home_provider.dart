@@ -162,81 +162,83 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
   // Fetch dashboard data from API
   Future<void> fetchDashboard() async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    bool isClockedIn = state.isClockedIn;
+    int totalTrips = 0;
+    String totalSteeringTime = '--';
+    int totalKms = 0;
+    String? errorMsg;
+
     try {
-      state = state.copyWith(isLoading: true);
-      
       final dashboard = await _repository.getDashboard();
       final data = dashboard.data;
-      
-      // Update state with dashboard data
-      // final now = DateTime.now();
-      // final today = DateTime(now.year, now.month, now.day);
-      
-      // Note: The dashboard's 'schedule' field might not be compatible with the new structured API models.
-      // We will rely on dedicated schedule endpoints for accurate duty lists.
-      List<DutyModel> todayDuties = []; 
 
-      // Fallback to dedicated today schedule endpoint to get accurate duties.
+      isClockedIn = state.clockInManuallySet ? state.isClockedIn : data.isClockedIn;
+      totalTrips = data.noOfTrips;
+      totalSteeringTime = data.steeringTime;
+      totalKms = data.totalKms;
+    } catch (e) {
+      print('⚠️ Dashboard stats fetch failed: $e');
+      if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
+        errorMsg = 'Authentication failed - Please re-login';
+      }
+    }
+
+    List<DutyModel> finalDuties = [];
+    List<DutyModel> weeklyDuties = [];
+    List<DutyModel> tomorrowDuties = [];
+
+    try {
       try {
         final todaySchedule = await _repository.getTodaySchedule();
-        todayDuties = _repository.convertTodayScheduleToDuties(todaySchedule);
-        print('📋 Today schedule loaded ${todayDuties.length} duties');
+        finalDuties = _repository.convertTodayScheduleToDuties(todaySchedule);
+        print('📋 Today schedule loaded ${finalDuties.length} duties');
       } catch (e) {
         print('⚠️ Today schedule fetch failed: $e');
+        if (errorMsg == null) errorMsg = 'Failed to load today\'s schedule';
       }
-      
-      // If clock-in was manually set, don't override it from dashboard
-      final newClockedInState = state.clockInManuallySet ? state.isClockedIn : data.isClockedIn;
-      
-      final finalDuties = todayDuties;
-      
-      // Fetch weekly schedule and merge it with today's duties
-      final weeklyDuties = await _fetchWeeklyScheduleInBackground();
 
-      // Fetch tomorrow's schedule explicitly as requested
-      final tomorrowDuties = await _fetchTomorrowSchedule();
-      
-      // Combine and remove duplicates
+      weeklyDuties = await _fetchWeeklyScheduleInBackground();
+
+      tomorrowDuties = await _fetchTomorrowSchedule(weeklyFallbackDuties: weeklyDuties);
+
       var allDutiesCombined = _mergeAndDeduplicateDuties(finalDuties, weeklyDuties);
       allDutiesCombined = _mergeAndDeduplicateDuties(allDutiesCombined, tomorrowDuties);
 
-      // 6. Update state once with all data
+      final hasFreshScheduleData = finalDuties.isNotEmpty || allDutiesCombined.isNotEmpty;
+      final shouldKeepExistingSchedules = !hasFreshScheduleData && state.allDuties.isNotEmpty;
+
+      final dutiesToApply = shouldKeepExistingSchedules ? state.duties : finalDuties;
+      final allDutiesToApply = shouldKeepExistingSchedules ? state.allDuties : allDutiesCombined;
+
+      if (shouldKeepExistingSchedules) {
+        print('⚠️ [HomeProvider] Schedule APIs unavailable, keeping last synced duties.');
+      }
+
       state = state.copyWith(
         isLoading: false,
-        isClockedIn: newClockedInState,
-        totalTrips: data.noOfTrips,
-        totalSteeringTime: data.steeringTime,
-        totalKms: data.totalKms,
-        duties: finalDuties, // This is still today's duties for the main view
-        allDuties: allDutiesCombined, // This is the complete list for other features
+        isClockedIn: isClockedIn,
+        totalTrips: totalTrips,
+        totalSteeringTime: totalSteeringTime,
+        totalKms: totalKms,
+        duties: dutiesToApply,
+        allDuties: allDutiesToApply,
         currentDutyIndex: 0,
-        allDutiesCompleted: finalDuties.isEmpty, // Set completed if no duties for date
-        errorMessage: null,
+        allDutiesCompleted: dutiesToApply.isEmpty && errorMsg == null,
+        errorMessage: dutiesToApply.isEmpty && allDutiesToApply.isEmpty ? errorMsg : null,
       );
-      print('🏠 [HomeProvider] Dashboard loaded. Today\'s duties: ${todayDuties.length}, Total unique duties: ${allDutiesCombined.length}');
+
+      print('🏠 [HomeProvider] Dashboard loaded. Today\'s duties: ${finalDuties.length}, Total unique duties: ${allDutiesCombined.length}');
+
     } catch (e) {
-      // Show error to user - no mock data fallback
-      print('❌ Dashboard fetch failed: $e');
-      
-      // Determine error type for better message
-      String errorMsg = 'Failed to load dashboard';
-      if (e.toString().contains('SocketException') || e.toString().contains('Network')) {
-        errorMsg = 'Network error - Backend server not responding';
-      } else if (e.toString().contains('TimeoutException')) {
-        errorMsg = 'Request timeout - Backend server is slow or offline';
-      } else if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
-        errorMsg = 'Authentication failed - Token may be expired';
-      } else if (e.toString().contains('404') || e.toString().contains('not found')) {
-        errorMsg = 'API endpoint not found - Backend config issue';
-      } else {
-        errorMsg = 'Backend Error: ${e.toString()}';
-      }
-      
+      print('❌ Critical Dashboard fetch failed: $e');
+
       state = state.copyWith(
         isLoading: false,
         duties: [],
         allDuties: [],
-        errorMessage: errorMsg,
+        errorMessage: 'Failed to load data: $e',
       );
     }
   }
@@ -274,14 +276,31 @@ class HomeNotifier extends StateNotifier<HomeState> {
   }
 
   /// Fetches tomorrow's schedule explicitly.
-  Future<List<DutyModel>> _fetchTomorrowSchedule() async {
+  /// If the tomorrow endpoint fails (for example HTTP 500),
+  /// fallback to duties for tomorrow derived from weekly data.
+  Future<List<DutyModel>> _fetchTomorrowSchedule({
+    List<DutyModel> weeklyFallbackDuties = const [],
+  }) async {
     try {
       final scheduleResponse = await _repository.getTomorrowSchedule();
       final tomorrowDuties = _repository.convertTomorrowScheduleToDuties(scheduleResponse); // Uses same response type
       print('📅 [HomeProvider] Tomorrow schedule fetched. Found ${tomorrowDuties.length} duties.');
       return tomorrowDuties;
     } catch (e) {
-      print('❌ [HomeProvider] Tomorrow schedule fetch failed: $e');
+      print('⚠️ [HomeProvider] Tomorrow endpoint failed: $e');
+
+      if (weeklyFallbackDuties.isNotEmpty) {
+        final now = DateTime.now();
+        final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+
+        final fallbackTomorrowDuties = weeklyFallbackDuties
+            .where((duty) => _isSameDay(duty.date, tomorrow))
+            .toList();
+
+        print('📅 [HomeProvider] Using weekly fallback for tomorrow. Found ${fallbackTomorrowDuties.length} duties.');
+        return fallbackTomorrowDuties;
+      }
+
       return [];
     }
   }

@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 class LiveTripModel {
   final int tripNo;
   final String dutyNo;
@@ -47,6 +49,39 @@ class LiveTripModel {
       steering: (json['steering'] ?? '').toString(),
       rest: (json['rest'] ?? '').toString(),
     );
+  }
+
+  String get reportingTime {
+    if (startTime.isEmpty) return '';
+    try {
+      String timeStr = startTime.trim().toUpperCase();
+      final now = DateTime.now();
+      DateTime date;
+
+      if (timeStr.contains('AM') || timeStr.contains('PM')) {
+        if (timeStr.indexOf(':') == 1) {
+           timeStr = '0$timeStr';
+        }
+        final format = DateFormat('hh:mm a');
+        final parsedTime = format.parse(timeStr);
+        date = DateTime(now.year, now.month, now.day, parsedTime.hour, parsedTime.minute);
+      } else {
+        List<String> parts = timeStr.split(':');
+        int hour = int.parse(parts[0]);
+        int minute = int.parse(parts[1]);
+        date = DateTime(now.year, now.month, now.day, hour, minute);
+      }
+
+      final reportingDate = date.subtract(const Duration(minutes: 15));
+
+      if (startTime.toUpperCase().contains('AM') || startTime.toUpperCase().contains('PM')) {
+        return DateFormat('h:mm a').format(reportingDate);
+      } else {
+        return DateFormat('HH:mm').format(reportingDate);
+      }
+    } catch (e) {
+      return startTime;
+    }
   }
 }
 

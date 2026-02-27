@@ -1,4 +1,4 @@
-package com.example.urban_ride_driver_new
+package com.urbanride.driver
 
 import io.flutter.embedding.android.FlutterActivity
 

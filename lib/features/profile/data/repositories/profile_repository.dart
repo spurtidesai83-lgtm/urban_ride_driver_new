@@ -2,6 +2,7 @@ import '../models/profile_model.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/api_profile_model.dart';
 import '../../../../shared/services/profile_api_service.dart';
+import '../../../../shared/services/storage_service.dart';
 
 class ProfileRepository {
   final ProfileApiService _apiService = ProfileApiService();
@@ -31,8 +32,29 @@ class ProfileRepository {
       // Convert API response to ProfileModel
       return _mapApiDataToProfile(apiResponse.data);
     } catch (e) {
-      // Throw error instead of returning mock data
-      throw Exception('Failed to fetch profile: $e');
+      print('⚠️ [ProfileRepository] Failed to fetch profile: $e');
+
+      final email = await StorageService.getUserEmail();
+      if (email != null && email.isNotEmpty) {
+        final name = email.split('@')[0];
+        print('✅ [ProfileRepository] Using fallback profile from stored email: $name');
+        return ProfileModel(
+          name: name,
+          email: email,
+          phone: '',
+          totalRides: 0,
+          dutiesDone: 0,
+          daysOfDuty: 0,
+          kmCovered: 0.0,
+          overtimeRate: 0.0,
+          isVerified: true,
+          profileImageUrl: null,
+          vehicleNumber: null,
+          vehicleModel: null,
+        );
+      }
+
+      rethrow;
     }
   }
 

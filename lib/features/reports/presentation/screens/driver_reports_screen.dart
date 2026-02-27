@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
-import '../../data/models/report_record_model.dart';
-import '../providers/report_provider.dart';
+import '../../../profile/data/models/trip_history_model.dart';
+import '../../../profile/presentation/providers/trip_history_provider.dart';
 
 class DriverReportsScreen extends ConsumerWidget {
   final String phoneOrEmail;
@@ -16,7 +16,7 @@ class DriverReportsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reportState = ref.watch(reportProvider);
+    final tripHistoryState = ref.watch(tripHistoryProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -39,60 +39,58 @@ class DriverReportsScreen extends ConsumerWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.black),
+            onPressed: () {
+              final _ = ref.refresh(tripHistoryProvider);
+            },
+          ),
+        ],
       ),
-      body: reportState.isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFC200)))
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-                  // Summary Widget (Replaces Earnings Header with original data)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _buildSummaryOverview(reportState),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Monthly Records Section
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: const Text(
-                      'Monthly Records',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF111827),
-                      ),
-                    ),
-                  ),
-                  
-                  // Records List
-                  ListView.builder(
-                    padding: const EdgeInsets.only(top: 8, bottom: 40),
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: reportState.records.length,
-                    itemBuilder: (context, index) {
-                       return _buildRecordItem(context, reportState.records[index]);
-                    }
-                  ),
-                ],
+      body: tripHistoryState.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFFC200))),
+        error: (error, stack) => Center(child: Text('Error: $error')),
+        data: (tripHistory) => SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildSummaryOverview(tripHistory),
               ),
-            ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: const Text(
+                  'Monthly Trip History',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              _buildGroupedTripList(context, tripHistory.tripDetails),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildSummaryOverview(ReportState state) {
+  Widget _buildSummaryOverview(TripHistoryModel history) {
      return Container(
        padding: const EdgeInsets.all(20),
        decoration: BoxDecoration(
-         color: const Color(0xFFFFFBEB), // Light yellow tint
+         color: const Color(0xFFFFFBEB),
          borderRadius: BorderRadius.circular(16),
          border: Border.all(color: const Color(0xFFFDE68A).withValues(alpha: 0.3)),
          boxShadow: [
            BoxShadow(
-             color: const Color(0xFFD97706).withValues(alpha: 0.05), // Warm shadow
+             color: const Color(0xFFD97706).withValues(alpha: 0.05),
              blurRadius: 15,
              offset: const Offset(0, 5),
            ),
@@ -100,13 +98,12 @@ class DriverReportsScreen extends ConsumerWidget {
        ),
        child: Column(
          children: [
-           // Top Row: Total Duties (Hero Stat)
            Row(
              children: [
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white, // White bg for icon to pop
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFFFF4CC)),
                   ),
@@ -117,11 +114,11 @@ class DriverReportsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      state.totalDuties.toString(),
+                      history.totalNoOfDuties.toString(),
                       style: const TextStyle(
                          fontSize: 32,
                          fontWeight: FontWeight.bold,
-                         color: Color(0xFF451A03), // Darker brown/black for contrast
+                         color: Color(0xFF451A03),
                          height: 1.0,
                       ),
                     ),
@@ -129,7 +126,7 @@ class DriverReportsScreen extends ConsumerWidget {
                     const Text(
                       'Total Duties Completed',
                       style: TextStyle(
-                        color: Color(0xFF92400E), // Warm dark grey/brown
+                        color: Color(0xFF92400E),
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -140,17 +137,16 @@ class DriverReportsScreen extends ConsumerWidget {
            ),
            const SizedBox(height: 24),
            Container(
-             height: 1, 
-             color: const Color(0xFFFDE68A).withValues(alpha: 0.5) // Subtle yellow divider
-           ), 
+             height: 1,
+             color: const Color(0xFFFDE68A).withValues(alpha: 0.5)
+           ),
            const SizedBox(height: 20),
-           // Bottom Row: Secondary Stats
            Row(
              mainAxisAlignment: MainAxisAlignment.spaceBetween,
              children: [
-               _buildDetailStat(Icons.speed, '${state.totalKm.toStringAsFixed(0)} km', 'Distance'),
-               _buildDetailStat(Icons.schedule, '${state.totalSteeringHours.toStringAsFixed(1)} h', 'Steering'),
-               _buildDetailStat(Icons.history_toggle_off, '${state.totalOvertime.toStringAsFixed(1)} h', 'Overtime'),
+               _buildDetailStat(Icons.speed, '${history.kmsTraveled.toStringAsFixed(0)} km', 'Distance'),
+               _buildDetailStat(Icons.schedule, history.steeringHrs, 'Steering'),
+               _buildDetailStat(Icons.history_toggle_off, '${history.overTime.toStringAsFixed(1)} h', 'Overtime'),
              ],
            ),
          ],
@@ -170,11 +166,11 @@ class DriverReportsScreen extends ConsumerWidget {
                const SizedBox(width: 6),
                Flexible(
                  child: Text(
-                   label, 
+                   label,
                    maxLines: 1,
                    overflow: TextOverflow.ellipsis,
                    style: const TextStyle(
-                     fontSize: 12, 
+                     fontSize: 12,
                      color: Color(0xFF6B7280),
                      fontWeight: FontWeight.w500,
                    ),
@@ -196,103 +192,216 @@ class DriverReportsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildGroupedTripList(BuildContext context, List<TripDetailModel> trips) {
+    if (trips.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text(
+            'No trip history available',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
 
-  Widget _buildRecordItem(BuildContext context, ReportRecord record) {
+    trips.sort((a, b) => b.tripDate.compareTo(a.tripDate));
+
+    final Map<String, List<TripDetailModel>> groupedTrips = {};
+
+    for (var trip in trips) {
+      try {
+        final date = DateTime.parse(trip.tripDate);
+        final key = _formatMonthYear(date);
+        if (!groupedTrips.containsKey(key)) {
+          groupedTrips[key] = [];
+        }
+        groupedTrips[key]!.add(trip);
+      } catch (e) {
+        const key = 'Unknown Date';
+        if (!groupedTrips.containsKey(key)) {
+          groupedTrips[key] = [];
+        }
+        groupedTrips[key]!.add(trip);
+      }
+    }
+
+    return ListView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: groupedTrips.length,
+      padding: EdgeInsets.zero,
+      itemBuilder: (context, index) {
+        final key = groupedTrips.keys.elementAt(index);
+        final monthTrips = groupedTrips[key]!;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Text(
+                key,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ),
+            ...monthTrips.map((trip) => _buildTripItem(context, trip)),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatMonthYear(DateTime date) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  Widget _buildTripItem(BuildContext context, TripDetailModel trip) {
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey[100]!)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.description_outlined, size: 20, color: Color(0xFF4B5563)),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        record.route,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildStatusBadge(record.status),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Text(
-                      'Duty #${record.dutyNo}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF6B7280),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6),
-                      child: Icon(Icons.circle, size: 4, color: Color(0xFFD1D5DB)),
-                    ),
-                    Text(
-                      record.date,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF6B7280),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                 Text(
-                   '${record.km.toStringAsFixed(1)} KM • ${record.steeringTime.toStringAsFixed(1)} Hrs Steering',
-                   style: const TextStyle(
-                     fontSize: 12,
-                     color: Color(0xFF9CA3AF),
-                   ),
-                 ),
-              ],
-            ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    _getDay(trip.tripDate),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFB45309),
+                    ),
+                  ),
+                  Text(
+                    _getMonthShort(trip.tripDate),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trip #${trip.tripNo}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1F2937),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Steering: ${trip.steeringHrs}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.directions_car, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${trip.kms} km',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            _buildStatusIcon(trip.status),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    bool isCompleted = status == 'Completed';
+  Widget _buildStatusIcon(String status) {
+    bool isCompleted = status.toLowerCase() == 'completed';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: isCompleted ? const Color(0xFFDEF7EC) : const Color(0xFFFFF4CC),
-        borderRadius: BorderRadius.circular(6),
+        color: isCompleted ? Colors.green[50] : Colors.orange[50],
+        shape: BoxShape.circle,
       ),
-      child: Text(
-        status,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isCompleted ? const Color(0xFF03543F) : const Color(0xFF92400E),
-        ),
+      child: Icon(
+        isCompleted ? Icons.check : Icons.access_time_filled,
+        size: 16,
+        color: isCompleted ? Colors.green[700] : Colors.orange[700],
       ),
     );
+  }
+
+  String _getDay(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      return date.day.toString();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  String _getMonthShort(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return months[date.month - 1];
+    } catch (e) {
+      return '';
+    }
   }
 }

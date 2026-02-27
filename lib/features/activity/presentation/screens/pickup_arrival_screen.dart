@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
 import '../providers/pickup_provider.dart';
 import 'package:urbandriver/features/home/presentation/providers/home_provider.dart';
+import 'package:urbandriver/features/home/presentation/widgets/map_view.dart';
+import 'package:urbandriver/features/home/data/models/duty_model.dart';
 import 'pickup_navigation_screen.dart';
 import '../../../home/presentation/screens/driver_main_screen.dart';
 
@@ -48,6 +51,13 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
                       child: _buildProgressStepper(context),
                     ),
                     
+                    SizedBox(height: ResponsiveUtils.padding(context, 20)),
+
+                    Padding(
+                      padding: ResponsiveUtils.symmetricPadding(context, horizontal: 20),
+                      child: _buildRouteMap(context),
+                    ),
+
                     SizedBox(height: ResponsiveUtils.padding(context, 20)),
                     
                     // Trip Live Status with Timer
@@ -190,6 +200,51 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
       height: 2,
       margin: EdgeInsets.only(bottom: ResponsiveUtils.padding(context, 28)),
       color: isActive ? const Color(0xFFFFC200) : Colors.grey[300],
+    );
+  }
+
+  Widget _buildRouteMap(BuildContext context) {
+    final pickupState = ref.watch(pickupProvider);
+    final homeState = ref.read(homeProvider);
+
+    if (pickupState.stops.isEmpty) return const SizedBox.shrink();
+
+    final routeStops = pickupState.stops
+        .map((s) => LatLng(s.latitude, s.longitude))
+        .toList();
+
+    final tempDuty = DutyModel(
+      dutyNo: pickupState.dutyNo,
+      route: '',
+      from: pickupState.startCheckpointName,
+      to: pickupState.endCheckpointName,
+      joiningTime: pickupState.startScheduledTime,
+      closeTime: pickupState.endScheduledTime,
+      date: DateTime.now(),
+      pickupLatitude: pickupState.startLatitude,
+      pickupLongitude: pickupState.startLongitude,
+      dropLatitude: pickupState.endLatitude,
+      dropLongitude: pickupState.endLongitude,
+    );
+
+    return Container(
+      height: 200,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: MapView(
+          currentDuty: tempDuty,
+          driverPosition: homeState.driverPosition,
+          tripStarted: true,
+          navigationMode: false,
+          routeStops: routeStops,
+        ),
+      ),
     );
   }
 

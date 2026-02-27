@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:urbandriver/features/home/data/models/duty_model.dart';
+import 'package:urbandriver/features/home/presentation/widgets/map_view.dart';
 import 'pin_entry_screen.dart';
 import 'trip_map_screen.dart';
 import 'package:urbandriver/features/home/presentation/providers/home_provider.dart';
@@ -18,6 +20,7 @@ class TripDetailsScreen extends ConsumerWidget {
   final int? kms;
   final bool isLiveTrip;
   final List<DutyStop>? stops;
+  final DutyModel? duty;
 
   const TripDetailsScreen({
     super.key,
@@ -32,6 +35,7 @@ class TripDetailsScreen extends ConsumerWidget {
     this.kms,
     this.isLiveTrip = false,
     this.stops,
+    this.duty,
   });
 
   @override
@@ -404,6 +408,34 @@ class TripDetailsScreen extends ConsumerWidget {
                     color: Colors.grey[600],
                   ),
                 ),
+                SizedBox(height: ResponsiveUtils.padding(context, 16)),
+                if (duty != null || (isLiveTrip && ref.read(homeProvider).currentDuty != null))
+                  Builder(
+                    builder: (context) {
+                      final useDuty = duty ?? ref.read(homeProvider).currentDuty!;
+                      return Container(
+                        height: 200,
+                        width: double.infinity,
+                        margin: EdgeInsets.only(bottom: ResponsiveUtils.padding(context, 12)),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: MapView(
+                            currentDuty: useDuty,
+                            driverPosition: ref.read(homeProvider).driverPosition,
+                            tripStarted: isLiveTrip,
+                            navigationMode: false,
+                            routeStops: useDuty.stops.map((s) => LatLng(s.latitude, s.longitude)).toList(),
+                            routeStopLabels: useDuty.stops.map((s) => s.location).toList(),
+                          ),
+                        ),
+                      );
+                    }
+                  ),
                 SizedBox(height: ResponsiveUtils.padding(context, 8)),
                 GestureDetector(
                   onTap: () {

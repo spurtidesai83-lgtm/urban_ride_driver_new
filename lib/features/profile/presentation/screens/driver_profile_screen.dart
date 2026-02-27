@@ -7,9 +7,14 @@ import '../../../auth/providers/auth_provider.dart';
 import '../../../auth/providers/registration_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 import '../../../activity/presentation/providers/activity_provider.dart';
+import '../../../activity/presentation/providers/pickup_provider.dart';
+import '../../../wallet/providers/wallet_provider.dart';
+import '../../../leave/providers/leave_provider.dart';
+import '../../../notifications/providers/notification_provider.dart';
 import '../../data/models/profile_model.dart';
 import '../providers/profile_provider.dart';
 import '../providers/trip_history_provider.dart';
+import '../providers/vehicle_provider.dart';
 import '../../../auth/screens/login.dart';
 import 'vehicle_documents_screen.dart';
 import 'ride_history_screen.dart';
@@ -127,7 +132,13 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                   ref.read(registrationProvider.notifier).reset();
                   ref.invalidate(homeProvider);
                   ref.invalidate(activityProvider);
+                  ref.invalidate(pickupProvider);
                   ref.invalidate(profileProvider);
+                  ref.invalidate(walletProvider);
+                  ref.invalidate(leaveProvider);
+                  ref.invalidate(tripHistoryProvider);
+                  ref.invalidate(vehicleProvider);
+                  ref.invalidate(notificationProvider);
                 } catch (e) {
                    debugPrint('Error signing out: $e');
                 }

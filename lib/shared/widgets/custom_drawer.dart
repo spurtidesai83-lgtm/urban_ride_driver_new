@@ -11,7 +11,13 @@ import '../../features/auth/screens/login.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/home/presentation/providers/home_provider.dart';
 import '../../features/activity/presentation/providers/activity_provider.dart';
+import '../../features/activity/presentation/providers/pickup_provider.dart';
 import '../../features/profile/presentation/providers/profile_provider.dart';
+import '../../features/profile/presentation/providers/trip_history_provider.dart';
+import '../../features/profile/presentation/providers/vehicle_provider.dart';
+import '../../features/wallet/providers/wallet_provider.dart';
+import '../../features/leave/providers/leave_provider.dart';
+import '../../features/notifications/providers/notification_provider.dart';
 
 
 class CustomDrawer extends StatelessWidget {
@@ -263,7 +269,13 @@ class DrawerItem extends StatelessWidget {
                 await container.read(authProvider.notifier).signOut();
                 container.invalidate(homeProvider);
                 container.invalidate(activityProvider);
+                container.invalidate(pickupProvider);
                 container.invalidate(profileProvider);
+                container.invalidate(tripHistoryProvider);
+                container.invalidate(vehicleProvider);
+                container.invalidate(walletProvider);
+                container.invalidate(leaveProvider);
+                container.invalidate(notificationProvider);
 
                 // Navigate to login screen and clear all previous routes
                 Navigator.pushAndRemoveUntil(

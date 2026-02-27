@@ -5,6 +5,7 @@ class TripModel {
   final String to;
   final DateTime date;
   final String timeDisplay;
+  final String startTime;
   final String? endTime;
   final String tripType;
   final String steeringTime;
@@ -19,6 +20,7 @@ class TripModel {
     required this.to,
     required this.date,
     required this.timeDisplay,
+    required this.startTime,
     this.endTime,
     required this.tripType,
     required this.steeringTime,
@@ -34,6 +36,7 @@ class TripModel {
     String? to,
     DateTime? date,
     String? timeDisplay,
+    String? startTime,
     String? endTime,
     String? tripType,
     String? steeringTime,
@@ -48,6 +51,7 @@ class TripModel {
       to: to ?? this.to,
       date: date ?? this.date,
       timeDisplay: timeDisplay ?? this.timeDisplay,
+      startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       tripType: tripType ?? this.tripType,
       steeringTime: steeringTime ?? this.steeringTime,

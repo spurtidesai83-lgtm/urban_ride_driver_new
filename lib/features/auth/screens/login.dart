@@ -6,6 +6,12 @@ import '../../home/presentation/screens/driver_main_screen.dart';
 import '../../home/presentation/providers/home_provider.dart';
 import '../../activity/presentation/providers/activity_provider.dart';
 import '../../profile/presentation/providers/profile_provider.dart';
+import '../../activity/presentation/providers/pickup_provider.dart';
+import '../../wallet/providers/wallet_provider.dart';
+import '../../leave/providers/leave_provider.dart';
+import '../../notifications/providers/notification_provider.dart';
+import '../../profile/presentation/providers/trip_history_provider.dart';
+import '../../profile/presentation/providers/vehicle_provider.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -87,7 +93,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (success && mounted) {
       ref.invalidate(homeProvider);
       ref.invalidate(activityProvider);
+      ref.invalidate(pickupProvider);
       ref.invalidate(profileProvider);
+      ref.invalidate(tripHistoryProvider);
+      ref.invalidate(vehicleProvider);
+      ref.invalidate(walletProvider);
+      ref.invalidate(leaveProvider);
+      ref.invalidate(notificationProvider);
 
       final driver = ref.read(authProvider).currentDriver;
       // Navigate directly to dashboard - skip vendor setup screens
