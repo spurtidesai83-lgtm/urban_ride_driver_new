@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:urbandriver/features/home/data/models/duty_model.dart';
 import '../../data/models/trip_log_models.dart';
 import '../../data/repositories/trip_repository.dart';
@@ -62,6 +64,7 @@ class PickupStop {
 class PickupState {
   final List<PickupStop> stops;
   final int currentStopIndex;
+  final String progressKey;
   final String dutyNo;
   final String tripStartTime;
   final bool hasStartedTrip;
@@ -80,6 +83,7 @@ class PickupState {
   PickupState({
     required this.stops,
     this.currentStopIndex = 0,
+    this.progressKey = '',
     this.dutyNo = '',
     this.tripStartTime = '',
     this.hasStartedTrip = false,
@@ -99,6 +103,7 @@ class PickupState {
   PickupState copyWith({
     List<PickupStop>? stops,
     int? currentStopIndex,
+    String? progressKey,
     String? dutyNo,
     String? tripStartTime,
     bool? hasStartedTrip,
@@ -117,6 +122,7 @@ class PickupState {
     return PickupState(
       stops: stops ?? this.stops,
       currentStopIndex: currentStopIndex ?? this.currentStopIndex,
+      progressKey: progressKey ?? this.progressKey,
       dutyNo: dutyNo ?? this.dutyNo,
       tripStartTime: tripStartTime ?? this.tripStartTime,
       hasStartedTrip: hasStartedTrip ?? this.hasStartedTrip,
@@ -155,6 +161,7 @@ class PickupState {
 
 class PickupNotifier extends StateNotifier<PickupState> {
   final TripRepository _repository;
+  static const String _progressPrefix = 'pickup_progress_';
 
   PickupNotifier(this._repository)
       : super(PickupState(
@@ -186,9 +193,11 @@ class PickupNotifier extends StateNotifier<PickupState> {
     }).toList();
 
     print('✅ [pickup_provider] Created ${pickupStops.length} pickup stops');
+    final progressKey = _buildDutyProgressKey(duty);
     state = PickupState(
       stops: pickupStops,
       currentStopIndex: 0,
+      progressKey: progressKey,
       dutyNo: (duty.routeCode != null && duty.routeCode!.isNotEmpty)
           ? duty.routeCode!
           : (duty.route.isNotEmpty ? duty.route : duty.dutyNo),
@@ -206,6 +215,82 @@ class PickupNotifier extends StateNotifier<PickupState> {
       endLongitude: duty.dropLongitude,
       endScheduledTime: duty.closeTime,
     );
+
+    _restoreSavedProgress();
+  }
+
+  String _buildDutyProgressKey(DutyModel duty) {
+    final datePart = '${duty.date.year}-${duty.date.month}-${duty.date.day}';
+    final tripPart = (duty.tripNo ?? 0).toString();
+    return '${duty.dutyNo}_${tripPart}_$datePart';
+  }
+
+  Future<void> _restoreSavedProgress() async {
+    if (state.progressKey.isEmpty || state.stops.isEmpty) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_progressPrefix${state.progressKey}');
+      if (raw == null || raw.isEmpty) return;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return;
+
+      final savedStops = decoded['stops'];
+      final hasStartedTrip = decoded['hasStartedTrip'] == true;
+      final tripStartTime = (decoded['tripStartTime'] ?? '').toString();
+
+      var restoredStops = List<PickupStop>.from(state.stops);
+
+      if (savedStops is List) {
+        for (var index = 0; index < restoredStops.length && index < savedStops.length; index++) {
+          final stopData = savedStops[index];
+          if (stopData is Map<String, dynamic>) {
+            restoredStops[index] = restoredStops[index].copyWith(
+              isArrived: stopData['isArrived'] == true,
+              isPickedUp: stopData['isPickedUp'] == true,
+            );
+          }
+        }
+      }
+
+      final nextIndex = restoredStops.indexWhere((stop) => !stop.isPickedUp);
+
+      state = state.copyWith(
+        stops: restoredStops,
+        currentStopIndex: nextIndex == -1 ? restoredStops.length : nextIndex,
+        hasStartedTrip: hasStartedTrip || restoredStops.any((s) => s.isPickedUp || s.isArrived),
+        tripStartTime: tripStartTime,
+      );
+
+      print('✅ [pickup_provider] Restored progress for ${state.progressKey}. Completed: ${state.completedStopsCount}/${state.stops.length}');
+    } catch (e) {
+      print('⚠️ [pickup_provider] Failed to restore progress: $e');
+    }
+  }
+
+  Future<void> _saveProgress() async {
+    if (state.progressKey.isEmpty) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = {
+        'progressKey': state.progressKey,
+        'hasStartedTrip': state.hasStartedTrip,
+        'tripStartTime': state.tripStartTime,
+        'currentStopIndex': state.currentStopIndex,
+        'stops': state.stops
+            .map((stop) => {
+                  'isArrived': stop.isArrived,
+                  'isPickedUp': stop.isPickedUp,
+                })
+            .toList(),
+      };
+
+      await prefs.setString('$_progressPrefix${state.progressKey}', jsonEncode(data));
+    } catch (e) {
+      print('⚠️ [pickup_provider] Failed to save progress: $e');
+    }
   }
 
   Future<void> startTripIfNeeded() async {
@@ -244,6 +329,8 @@ class PickupNotifier extends StateNotifier<PickupState> {
         tripStartTime: _formatTime24(now),
       );
     }
+
+    await _saveProgress();
   }
 
   // Format time as HH:mm:ss (24-hour)
@@ -305,6 +392,9 @@ class PickupNotifier extends StateNotifier<PickupState> {
   Future<void> markArrived() async {
     final currentStop = state.currentStop;
     if (currentStop == null) return;
+    if (currentStop.isPickedUp || currentStop.isArrived) {
+      return;
+    }
 
     await startTripIfNeeded();
 
@@ -312,6 +402,7 @@ class PickupNotifier extends StateNotifier<PickupState> {
     updatedStops[state.currentStopIndex] = currentStop.copyWith(isArrived: true);
     
     state = state.copyWith(stops: updatedStops);
+    await _saveProgress();
 
     if (state.dutyNo.isNotEmpty && state.tripStartTime.isNotEmpty) {
       final loggedTime = DateTime.now().toIso8601String();
@@ -329,6 +420,9 @@ class PickupNotifier extends StateNotifier<PickupState> {
   Future<void> markPickedUp() async {
     final currentStop = state.currentStop;
     if (currentStop == null) return;
+    if (currentStop.isPickedUp) {
+      return;
+    }
 
     print('✅ [pickup_provider] Marking pickup #${state.currentStopIndex + 1} as picked up');
 
@@ -345,8 +439,11 @@ class PickupNotifier extends StateNotifier<PickupState> {
       state = state.copyWith(currentStopIndex: state.currentStopIndex + 1);
       print('✅ [pickup_provider] Advanced to next stop: #${state.currentStopIndex + 1}');
     } else {
+      state = state.copyWith(currentStopIndex: state.stops.length);
       print('✅ [pickup_provider] All stops completed!');
     }
+
+    await _saveProgress();
   }
 
   Future<void> markNoShow() async {

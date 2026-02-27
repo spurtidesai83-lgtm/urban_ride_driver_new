@@ -32,7 +32,7 @@ class VehicleDocumentsScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.black),
             onPressed: () {
-              ref.refresh(documentVerificationProvider);
+              final _ = ref.refresh(documentVerificationProvider);
             },
           ),
         ],
@@ -91,7 +91,7 @@ class VehicleDocumentsScreen extends ConsumerWidget {
                 ),
               ),
               onPressed: () {
-                ref.refresh(documentVerificationProvider);
+                final _ = ref.refresh(documentVerificationProvider);
               },
               child: Text(
                 'Retry',

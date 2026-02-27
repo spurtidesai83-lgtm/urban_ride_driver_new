@@ -681,20 +681,27 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   }
 
   Widget _buildMenuOptions(BuildContext context, ProfileModel profile, WidgetRef ref) {
+    final vehicleAsync = ref.watch(vehicleProvider);
+    final profileVehicleModel = (profile.vehicleModel ?? '').trim();
+    final vehicleSubtitle = vehicleAsync.maybeWhen(
+      data: (vehicle) => vehicle.model.trim().isNotEmpty ? vehicle.model.trim() : 'Vehicle details',
+      orElse: () => profileVehicleModel.isNotEmpty ? profileVehicleModel : 'Vehicle details',
+    );
+
     return Column(
       children: [
         _buildListTile(
           context,
           icon: Icons.directions_car,
           title: 'Vehicle Information',
-          subtitle: profile.vehicleModel ?? '-',
+          subtitle: vehicleSubtitle,
           onTap: () => _showVehicleDetails(context, profile),
         ),
         _buildListTile(
           context,
           icon: Icons.folder_shared,
           title: 'Documents',
-          subtitle: 'License, RC, Insurance',
+          subtitle: 'RC, Permit, PUC',
           onTap: () {
             Navigator.push(
               context,

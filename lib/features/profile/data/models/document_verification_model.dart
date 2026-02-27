@@ -1,5 +1,5 @@
 class DocumentVerificationModel {
-  final String documentType; // 'RC', 'POC', 'Permit'
+  final String documentType; // 'RC', 'PUC', 'Permit'
   final bool isVerified;
   final String? expiryDate; // ISO 8601 format
   final String? documentNumber;
@@ -43,8 +43,10 @@ class DocumentVerificationModel {
     switch (documentType.toUpperCase()) {
       case 'RC':
         return 'Registration Certificate (RC)';
+      case 'PUC':
+        return 'Pollution Certificate (PUC)';
       case 'POC':
-        return 'Pollution Certificate (POC)';
+        return 'Pollution Certificate (PUC)';
       case 'PERMIT':
         return 'Permit';
       default:
@@ -132,7 +134,7 @@ class VehicleDocumentsModel {
       
       if (type == 'RC') {
         rc = docModel;
-      } else if (type == 'POC') {
+      } else if (type == 'POC' || type == 'PUC') {
         poc = docModel;
       } else if (type == 'PERMIT') {
         permit = docModel;

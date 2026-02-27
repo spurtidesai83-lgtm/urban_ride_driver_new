@@ -64,7 +64,7 @@ class DocumentVerificationRepository {
     );
 
     final poc = buildDoc(
-      type: 'POC',
+      type: 'PUC',
       number: payload['pucNumber']?.toString(),
       expiry: payload['pucExpiryDate']?.toString(),
     );
