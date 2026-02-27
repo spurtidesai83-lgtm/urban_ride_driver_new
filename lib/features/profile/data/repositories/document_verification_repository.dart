@@ -21,14 +21,92 @@ class DocumentVerificationRepository {
       }
 
       final jsonData = jsonDecode(response.body);
-      final payload = (jsonData is Map && jsonData['data'] is Map)
-          ? jsonData['data'] as Map<String, dynamic>
-          : (jsonData as Map<String, dynamic>);
+      final payload = _extractPayload(jsonData);
 
       return _mapVehicleDocuments(payload);
     } catch (e) {
       throw Exception('Failed to get vehicle documents: $e');
     }
+  }
+
+  Map<String, dynamic> _extractPayload(dynamic raw) {
+    bool hasDocumentKeys(Map<String, dynamic> map) {
+      const keys = {
+        'rcnumber',
+        'rcexpirydate',
+        'permitnumber',
+        'permitexpirydate',
+        'pucnumber',
+        'pucexpirydate',
+        'pocnumber',
+        'pocexpirydate',
+      };
+      final normalizedKeys = map.keys.map((k) => k.toLowerCase().replaceAll('_', '')).toSet();
+      return normalizedKeys.any(keys.contains);
+    }
+
+    if (raw is Map<String, dynamic>) {
+      if (hasDocumentKeys(raw)) {
+        return raw;
+      }
+
+      final data = raw['data'];
+      if (data is Map<String, dynamic>) {
+        if (hasDocumentKeys(data)) {
+          return data;
+        }
+
+        final nested = data['documents'] ?? data['vehicleDocuments'] ?? data['vehicle_documents'];
+        if (nested is Map<String, dynamic>) {
+          return nested;
+        }
+
+        return data;
+      }
+      if (data is List && data.isNotEmpty && data.first is Map<String, dynamic>) {
+        final first = data.first as Map<String, dynamic>;
+        if (hasDocumentKeys(first)) {
+          return first;
+        }
+        final nested = first['documents'] ?? first['vehicleDocuments'] ?? first['vehicle_documents'];
+        if (nested is Map<String, dynamic>) {
+          return nested;
+        }
+        return first;
+      }
+
+      final nested = raw['documents'] ?? raw['vehicleDocuments'] ?? raw['vehicle_documents'];
+      if (nested is Map<String, dynamic>) {
+        return nested;
+      }
+
+      return raw;
+    }
+
+    if (raw is List && raw.isNotEmpty && raw.first is Map<String, dynamic>) {
+      return raw.first as Map<String, dynamic>;
+    }
+
+    return <String, dynamic>{};
+  }
+
+  String? _readString(Map<String, dynamic> payload, List<String> keys) {
+    final normalizedMap = <String, dynamic>{};
+    payload.forEach((key, value) {
+      normalizedMap[key.toLowerCase().replaceAll('_', '')] = value;
+    });
+
+    for (final key in keys) {
+      final normalizedKey = key.toLowerCase().replaceAll('_', '');
+      final value = payload[key] ?? normalizedMap[normalizedKey];
+      if (value != null) {
+        final text = value.toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') {
+          return text;
+        }
+      }
+    }
+    return null;
   }
 
   VehicleDocumentsModel _mapVehicleDocuments(Map<String, dynamic> payload) {
@@ -53,20 +131,20 @@ class DocumentVerificationRepository {
 
     final rc = buildDoc(
       type: 'RC',
-      number: payload['rcNumber']?.toString(),
-      expiry: payload['rcExpiryDate']?.toString(),
+      number: _readString(payload, ['rcNumber', 'rc_number', 'RCNumber', 'rcNo', 'rc_no']),
+      expiry: _readString(payload, ['rcExpiryDate', 'rc_expiry_date', 'RCExpiryDate', 'rcExpiry']),
     );
 
     final permit = buildDoc(
       type: 'PERMIT',
-      number: payload['permitNumber']?.toString(),
-      expiry: payload['permitExpiryDate']?.toString(),
+      number: _readString(payload, ['permitNumber', 'permit_number', 'PermitNumber', 'permitNo', 'permit_no']),
+      expiry: _readString(payload, ['permitExpiryDate', 'permit_expiry_date', 'PermitExpiryDate', 'permitExpiry']),
     );
 
     final poc = buildDoc(
       type: 'PUC',
-      number: payload['pucNumber']?.toString(),
-      expiry: payload['pucExpiryDate']?.toString(),
+      number: _readString(payload, ['pucNumber', 'puc_number', 'PUCNumber', 'pucNo', 'puc_no', 'pocNumber', 'poc_number']),
+      expiry: _readString(payload, ['pucExpiryDate', 'puc_expiry_date', 'PUCExpiryDate', 'pucExpiry', 'pocExpiryDate', 'poc_expiry_date']),
     );
 
     return VehicleDocumentsModel(
