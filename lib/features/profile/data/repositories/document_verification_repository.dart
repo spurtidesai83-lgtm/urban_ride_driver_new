@@ -8,108 +8,233 @@ class DocumentVerificationRepository {
   Future<VehicleDocumentsModel> getDocuments() async {
     try {
       final token = await StorageService.getToken();
-      final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.vehicleEndpoint));
+      final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.vehicleDocumentsEndpoint));
 
       final response = await http.get(
         url,
         headers: ApiConfig.getHeaders(token: token),
       ).timeout(ApiConfig.connectTimeout);
 
-      if (response.statusCode != 200) {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Failed to fetch vehicle documents');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(_readErrorMessage(response.body, response.statusCode));
       }
 
-      final jsonData = jsonDecode(response.body);
-      final payload = _extractPayload(jsonData);
+      final decodedBody = jsonDecode(response.body);
+      final jsonData = _decodeNode(decodedBody);
+      final payload = _extractPrimaryPayload(jsonData);
 
-      return _mapVehicleDocuments(payload);
+      if (payload is Map &&
+          VehicleDocumentsModel.isFlatVehicleDocumentsPayload(payload)) {
+        return VehicleDocumentsModel.fromFlatVehicleDocumentsPayload(payload);
+      }
+
+      final mapped = _mapVehicleDocuments(payload);
+      if (mapped.allDocuments.isEmpty) {
+        if (_looksLikeVehicleDetailsPayload(payload)) {
+          throw Exception(
+            'Documents API mismatch: received vehicle details payload. '
+            'Expected rcNumber/rcExpiryDate, permitNumber/permitExpiryDate, pucNumber/pucExpiryDate.',
+          );
+        }
+        throw Exception('Vehicle documents are missing in API response');
+      }
+
+      return mapped;
     } catch (e) {
       throw Exception('Failed to get vehicle documents: $e');
     }
   }
 
-  Map<String, dynamic> _extractPayload(dynamic raw) {
-    bool hasDocumentKeys(Map<String, dynamic> map) {
-      const keys = {
-        'rcnumber',
-        'rcexpirydate',
-        'permitnumber',
-        'permitexpirydate',
-        'pucnumber',
-        'pucexpirydate',
-        'pocnumber',
-        'pocexpirydate',
-      };
-      final normalizedKeys = map.keys.map((k) => k.toLowerCase().replaceAll('_', '')).toSet();
-      return normalizedKeys.any(keys.contains);
-    }
-
-    if (raw is Map<String, dynamic>) {
-      if (hasDocumentKeys(raw)) {
-        return raw;
-      }
-
-      final data = raw['data'];
-      if (data is Map<String, dynamic>) {
-        if (hasDocumentKeys(data)) {
-          return data;
-        }
-
-        final nested = data['documents'] ?? data['vehicleDocuments'] ?? data['vehicle_documents'];
-        if (nested is Map<String, dynamic>) {
-          return nested;
-        }
-
-        return data;
-      }
-      if (data is List && data.isNotEmpty && data.first is Map<String, dynamic>) {
-        final first = data.first as Map<String, dynamic>;
-        if (hasDocumentKeys(first)) {
-          return first;
-        }
-        final nested = first['documents'] ?? first['vehicleDocuments'] ?? first['vehicle_documents'];
-        if (nested is Map<String, dynamic>) {
-          return nested;
-        }
-        return first;
-      }
-
-      final nested = raw['documents'] ?? raw['vehicleDocuments'] ?? raw['vehicle_documents'];
-      if (nested is Map<String, dynamic>) {
-        return nested;
-      }
-
-      return raw;
-    }
-
-    if (raw is List && raw.isNotEmpty && raw.first is Map<String, dynamic>) {
-      return raw.first as Map<String, dynamic>;
-    }
-
-    return <String, dynamic>{};
+  bool _looksLikeVehicleDetailsPayload(dynamic payload) {
+    final registration = _extractField(payload, ['registrationNumber', 'registration_number']);
+    final model = _extractField(payload, ['model', 'vehicleModel', 'vehicle_model']);
+    return (registration ?? '').trim().isNotEmpty && (model ?? '').trim().isNotEmpty;
   }
 
-  String? _readString(Map<String, dynamic> payload, List<String> keys) {
-    final normalizedMap = <String, dynamic>{};
-    payload.forEach((key, value) {
-      normalizedMap[key.toLowerCase().replaceAll('_', '')] = value;
-    });
-
-    for (final key in keys) {
-      final normalizedKey = key.toLowerCase().replaceAll('_', '');
-      final value = payload[key] ?? normalizedMap[normalizedKey];
-      if (value != null) {
-        final text = value.toString().trim();
-        if (text.isNotEmpty && text.toLowerCase() != 'null') {
-          return text;
-        }
+  String _readErrorMessage(String body, int statusCode) {
+    try {
+      final parsed = jsonDecode(body);
+      if (parsed is Map && parsed['message'] != null) {
+        final text = parsed['message'].toString().trim();
+        if (text.isNotEmpty) return text;
       }
-    }
-    return null;
+    } catch (_) {}
+    return 'Failed to fetch vehicle documents (HTTP $statusCode)';
   }
 
-  VehicleDocumentsModel _mapVehicleDocuments(Map<String, dynamic> payload) {
+  dynamic _extractPrimaryPayload(dynamic root) {
+    bool hasDocumentKeys(dynamic node) {
+      if (node is! Map) return false;
+      return VehicleDocumentsModel.isFlatVehicleDocumentsPayload(node) ||
+          node.containsKey('rc') ||
+          node.containsKey('permit') ||
+          node.containsKey('puc') ||
+          node.containsKey('poc');
+    }
+
+    dynamic candidateOrNull(dynamic node) {
+      if (node == null) return null;
+      final decoded = _decodeNode(node);
+      if (hasDocumentKeys(decoded)) return decoded;
+      return null;
+    }
+
+    if (root is Map) {
+      final rootMatch = candidateOrNull(root);
+      if (rootMatch != null) return rootMatch;
+
+      final dataMatch = candidateOrNull(root['data']);
+      if (dataMatch != null) return dataMatch;
+
+      final docsMatch = candidateOrNull(
+        root['documents'] ?? root['vehicleDocuments'] ?? root['vehicle_documents'],
+      );
+      if (docsMatch != null) return docsMatch;
+
+      final nestedData = root['data'];
+      if (nestedData is Map) {
+        final nestedVehicleMatch = candidateOrNull(
+          nestedData['documents'] ??
+              nestedData['vehicleDocuments'] ??
+              nestedData['vehicle_documents'] ??
+              nestedData['vehicle'],
+        );
+        if (nestedVehicleMatch != null) return nestedVehicleMatch;
+      }
+    }
+    return root;
+  }
+
+  String _normalizeKey(String key) {
+    return key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  dynamic _decodeNode(dynamic node) {
+    if (node is String) {
+      final trimmed = node.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          return _decodeNode(jsonDecode(trimmed));
+        } catch (_) {
+          return node;
+        }
+      }
+      return node;
+    }
+
+    if (node is List) {
+      return node.map(_decodeNode).toList();
+    }
+
+    if (node is Map) {
+      return node.map((key, value) => MapEntry(key, _decodeNode(value)));
+    }
+
+    return node;
+  }
+
+  String? _extractField(dynamic node, List<String> keys) {
+    final normalizedTarget = keys
+        .map(_normalizeKey)
+        .toSet();
+
+    String? normalizeValue(dynamic value) {
+      if (value == null) return null;
+      final text = value.toString().trim();
+      if (text.isEmpty || text.toLowerCase() == 'null') return null;
+      return text;
+    }
+
+    String? search(dynamic current) {
+      if (current is Map) {
+        for (final entry in current.entries) {
+          final key = entry.key.toString();
+          final normalizedKey = _normalizeKey(key);
+          if (normalizedTarget.contains(normalizedKey)) {
+            final value = normalizeValue(entry.value);
+            if (value != null) return value;
+          }
+        }
+
+        for (final entry in current.entries) {
+          final value = search(entry.value);
+          if (value != null) return value;
+        }
+      }
+
+      if (current is List) {
+        for (final item in current) {
+          final value = search(item);
+          if (value != null) return value;
+        }
+      }
+
+      return null;
+    }
+
+    return search(node);
+  }
+
+  dynamic _extractContainer(dynamic node, List<String> containerKeys) {
+    final normalizedTargets = containerKeys.map(_normalizeKey).toSet();
+
+    dynamic search(dynamic current) {
+      if (current is Map) {
+        for (final entry in current.entries) {
+          final normalized = _normalizeKey(entry.key.toString());
+          if (normalizedTargets.contains(normalized)) {
+            return entry.value;
+          }
+        }
+        for (final entry in current.entries) {
+          final found = search(entry.value);
+          if (found != null) return found;
+        }
+      }
+      if (current is List) {
+        for (final item in current) {
+          final found = search(item);
+          if (found != null) return found;
+        }
+      }
+      return null;
+    }
+
+    return search(node);
+  }
+
+  dynamic _extractTypedDocumentContainer(dynamic node, List<String> typeKeys) {
+    final normalizedTypes = typeKeys.map(_normalizeKey).toSet();
+
+    dynamic search(dynamic current) {
+      if (current is List) {
+        for (final item in current) {
+          if (item is Map) {
+            final type = _extractField(item, ['documentType', 'type', 'docType', 'name']);
+            if (type != null && normalizedTypes.contains(_normalizeKey(type))) {
+              return item;
+            }
+          }
+          final found = search(item);
+          if (found != null) return found;
+        }
+      }
+
+      if (current is Map) {
+        for (final entry in current.entries) {
+          final found = search(entry.value);
+          if (found != null) return found;
+        }
+      }
+
+      return null;
+    }
+
+    return search(node);
+  }
+
+  VehicleDocumentsModel _mapVehicleDocuments(dynamic rawResponse) {
     DocumentVerificationModel? buildDoc({
       required String type,
       required String? number,
@@ -129,22 +254,35 @@ class DocumentVerificationRepository {
       );
     }
 
+    final rcContainer = _extractContainer(rawResponse, ['rc', 'registrationCertificate', 'registration'])
+      ?? _extractTypedDocumentContainer(rawResponse, ['rc', 'registration', 'registrationcertificate']);
+    final permitContainer = _extractContainer(rawResponse, ['permit'])
+      ?? _extractTypedDocumentContainer(rawResponse, ['permit']);
+    final pucContainer = _extractContainer(rawResponse, ['puc', 'poc', 'pollutionCertificate', 'pollution'])
+      ?? _extractTypedDocumentContainer(rawResponse, ['puc', 'poc', 'pollution', 'pollutioncertificate']);
+
     final rc = buildDoc(
       type: 'RC',
-      number: _readString(payload, ['rcNumber', 'rc_number', 'RCNumber', 'rcNo', 'rc_no']),
-      expiry: _readString(payload, ['rcExpiryDate', 'rc_expiry_date', 'RCExpiryDate', 'rcExpiry']),
+        number: _extractField(rawResponse, ['rcNumber', 'rc_number', 'RCNumber', 'rcNo', 'rc_no'])
+          ?? _extractField(rcContainer, ['number', 'docNumber', 'documentNumber', 'value', 'documentId']),
+        expiry: _extractField(rawResponse, ['rcExpiryDate', 'rc_expiry_date', 'RCExpiryDate', 'rcExpiry'])
+          ?? _extractField(rcContainer, ['expiryDate', 'expiry', 'validTill', 'expiryOn', 'validUpto', 'validTillDate']),
     );
 
     final permit = buildDoc(
       type: 'PERMIT',
-      number: _readString(payload, ['permitNumber', 'permit_number', 'PermitNumber', 'permitNo', 'permit_no']),
-      expiry: _readString(payload, ['permitExpiryDate', 'permit_expiry_date', 'PermitExpiryDate', 'permitExpiry']),
+        number: _extractField(rawResponse, ['permitNumber', 'permit_number', 'PermitNumber', 'permitNo', 'permit_no'])
+          ?? _extractField(permitContainer, ['number', 'docNumber', 'documentNumber', 'value', 'documentId']),
+        expiry: _extractField(rawResponse, ['permitExpiryDate', 'permit_expiry_date', 'PermitExpiryDate', 'permitExpiry'])
+          ?? _extractField(permitContainer, ['expiryDate', 'expiry', 'validTill', 'expiryOn', 'validUpto', 'validTillDate']),
     );
 
     final poc = buildDoc(
       type: 'PUC',
-      number: _readString(payload, ['pucNumber', 'puc_number', 'PUCNumber', 'pucNo', 'puc_no', 'pocNumber', 'poc_number']),
-      expiry: _readString(payload, ['pucExpiryDate', 'puc_expiry_date', 'PUCExpiryDate', 'pucExpiry', 'pocExpiryDate', 'poc_expiry_date']),
+        number: _extractField(rawResponse, ['pucNumber', 'puc_number', 'PUCNumber', 'pucNo', 'puc_no', 'pocNumber', 'poc_number'])
+          ?? _extractField(pucContainer, ['number', 'docNumber', 'documentNumber', 'value', 'documentId']),
+        expiry: _extractField(rawResponse, ['pucExpiryDate', 'puc_expiry_date', 'PUCExpiryDate', 'pucExpiry', 'pocExpiryDate', 'poc_expiry_date'])
+          ?? _extractField(pucContainer, ['expiryDate', 'expiry', 'validTill', 'expiryOn', 'validUpto', 'validTillDate']),
     );
 
     return VehicleDocumentsModel(

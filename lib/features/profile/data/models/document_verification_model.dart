@@ -108,7 +108,69 @@ class VehicleDocumentsModel {
     this.permit,
   });
 
+    static bool isFlatVehicleDocumentsPayload(Map<dynamic, dynamic> json) {
+    return json.containsKey('rcNumber') ||
+      json.containsKey('rc_number') ||
+        json.containsKey('permitNumber') ||
+      json.containsKey('permit_number') ||
+        json.containsKey('pucNumber') ||
+      json.containsKey('puc_number') ||
+        json.containsKey('pocNumber');
+  }
+
+  static String? _toNullableString(dynamic value) {
+    if (value == null) return null;
+    final text = value.toString().trim();
+    if (text.isEmpty || text.toLowerCase() == 'null') return null;
+    return text;
+  }
+
+  static DocumentVerificationModel? _buildBackendDoc({
+    required String type,
+    required dynamic number,
+    required dynamic expiry,
+  }) {
+    final docNumber = _toNullableString(number);
+    final expiryDate = _toNullableString(expiry);
+
+    if (docNumber == null && expiryDate == null) {
+      return null;
+    }
+
+    return DocumentVerificationModel(
+      documentType: type,
+      isVerified: docNumber != null,
+      documentNumber: docNumber,
+      expiryDate: expiryDate,
+    );
+  }
+
+  factory VehicleDocumentsModel.fromFlatVehicleDocumentsPayload(
+      Map<dynamic, dynamic> json) {
+    return VehicleDocumentsModel(
+      rc: _buildBackendDoc(
+        type: 'RC',
+        number: json['rcNumber'] ?? json['rc_number'],
+        expiry: json['rcExpiryDate'] ?? json['rc_expiry_date'],
+      ),
+      permit: _buildBackendDoc(
+        type: 'PERMIT',
+        number: json['permitNumber'] ?? json['permit_number'],
+        expiry: json['permitExpiryDate'] ?? json['permit_expiry_date'],
+      ),
+      poc: _buildBackendDoc(
+        type: 'PUC',
+        number: json['pucNumber'] ?? json['puc_number'] ?? json['pocNumber'] ?? json['poc_number'],
+        expiry: json['pucExpiryDate'] ?? json['puc_expiry_date'] ?? json['pocExpiryDate'] ?? json['poc_expiry_date'],
+      ),
+    );
+  }
+
   factory VehicleDocumentsModel.fromJson(Map<String, dynamic> json) {
+    if (isFlatVehicleDocumentsPayload(json)) {
+      return VehicleDocumentsModel.fromFlatVehicleDocumentsPayload(json);
+    }
+
     return VehicleDocumentsModel(
       rc: json['rc'] != null
           ? DocumentVerificationModel.fromJson(json['rc'])

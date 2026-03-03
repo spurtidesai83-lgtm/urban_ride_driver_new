@@ -19,12 +19,121 @@ class PickupArrivalScreen extends ConsumerStatefulWidget {
 class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
   bool _showPassengerNotArrived = false;
 
+  Future<void> _completeDutyAndReturnHome() async {
+    final pickupNotifier = ref.read(pickupProvider.notifier);
+    final homeNotifier = ref.read(homeProvider.notifier);
+
+    await pickupNotifier.endTrip();
+    homeNotifier.completeCurrentDuty();
+
+    final homeState = ref.read(homeProvider);
+    pickupNotifier.loadStopsFromDuty(homeState.currentDuty);
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => const DriverMainScreen(
+          phoneOrEmail: 'driver@example.com',
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pickupState = ref.watch(pickupProvider);
     final currentStop = pickupState.currentStop;
+    final allStopsCompleted = pickupState.stops.isNotEmpty &&
+        pickupState.currentStopIndex >= pickupState.stops.length;
 
     if (currentStop == null) {
+      if (allStopsCompleted) {
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(context),
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: ResponsiveUtils.symmetricPadding(context, horizontal: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: ResponsiveUtils.iconSize(context, 56),
+                          ),
+                          SizedBox(height: ResponsiveUtils.padding(context, 12)),
+                          Text(
+                            'All pickups completed',
+                            style: TextStyle(
+                              fontSize: ResponsiveUtils.fontSize(context, 18),
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          SizedBox(height: ResponsiveUtils.padding(context, 6)),
+                          Text(
+                            'End this duty to continue with your next duty.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: ResponsiveUtils.fontSize(context, 14),
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          bottomSheet: Container(
+            padding: ResponsiveUtils.symmetricPadding(context, horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withValues(alpha: 0.2),
+                  spreadRadius: 1,
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  await _completeDutyAndReturnHome();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: ResponsiveUtils.symmetricPadding(context, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(ResponsiveUtils.borderRadius(context, 24)),
+                  ),
+                ),
+                child: Text(
+                  'End Duty',
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.fontSize(context, 16),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       return const Scaffold(
         body: Center(child: Text('No pickup stops available')),
       );
@@ -528,9 +637,12 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
   }
 
   Widget _buildNextPickups(BuildContext context) {
+    final pickupState = ref.watch(pickupProvider);
+    final nextStops = pickupState.nextStops;
+
     return Container(
       width: 345,
-      height: 159,
+      constraints: const BoxConstraints(minHeight: 120),
       // The parent padding handles the visual "left: 24px" and "top" positioning in the flow,
       // but to be precise with "left: 24px" we might need to adjust the parent or margin here if the parent is different.
       // The parent has symmetric padding 20. If we want 24, we can add margin or change parent.
@@ -555,11 +667,34 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
               color: Colors.black,
             ),
           ),
-          Spacer(),
-          _buildNextPickupItem(context, '2', 'Wakad Tech Park', '1 Passenger • ETA 09:50 AM'),
-          SizedBox(height: 12),
-          _buildNextPickupItem(context, '3', 'Baner Mahalunge Road', '1 Passenger • ETA 10:05 AM'),
-          Spacer(),
+          SizedBox(height: ResponsiveUtils.padding(context, 12)),
+          if (nextStops.isEmpty)
+            Text(
+              'No upcoming pickups',
+              style: TextStyle(
+                fontSize: ResponsiveUtils.fontSize(context, 13),
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          else
+            ...nextStops.asMap().entries.map((entry) {
+              final index = entry.key;
+              final stop = entry.value;
+              final details = '${stop.passengers} • ETA ${stop.scheduledTime}';
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == nextStops.length - 1 ? 0 : ResponsiveUtils.padding(context, 12),
+                ),
+                child: _buildNextPickupItem(
+                  context,
+                  stop.stopNumber,
+                  stop.location,
+                  details,
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -711,7 +846,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
                         );
                       } else {
                         print('🔄 [PickupArrivalScreen] All pickups completed!');
-                        // If all stops done, button at bottom will show End Duty
+                        await _completeDutyAndReturnHome();
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -819,10 +954,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
                         );
                       } else {
                         print('🔄 [PickupArrivalScreen] All pickups completed!');
-                        // Close the passenger not arrived card
-                        setState(() {
-                          _showPassengerNotArrived = false;
-                        });
+                        await _completeDutyAndReturnHome();
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -907,10 +1039,9 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
             final pickupNotifier = ref.read(pickupProvider.notifier);
             
             if (isLastStop) {
-              await pickupNotifier.endTrip();
-
               // Mark last pickup as picked up
               await pickupNotifier.markPickedUp();
+              await pickupNotifier.endTrip();
               
               // End duty - complete current duty and go to home
               final homeNotifier = ref.read(homeProvider.notifier);

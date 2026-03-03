@@ -5,6 +5,7 @@ class StorageService {
   static const String _tokenTypeKey = 'token_type';
   static const String _expiresInKey = 'expires_in';
   static const String _userEmailKey = 'user_email';
+  static const List<String> _preservedPrefixes = ['pickup_progress_'];
   
   // Save authentication token
   static Future<void> saveToken(String token, String tokenType, String expiresIn) async {
@@ -52,7 +53,13 @@ class StorageService {
   // Clear all stored data
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      final shouldPreserve = _preservedPrefixes.any((prefix) => key.startsWith(prefix));
+      if (!shouldPreserve) {
+        await prefs.remove(key);
+      }
+    }
   }
   
   // Check if user is logged in

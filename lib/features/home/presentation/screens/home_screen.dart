@@ -939,6 +939,8 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildShiftControlCard(BuildContext context, HomeState homeState, HomeNotifier homeNotifier) {
     return GestureDetector(
       onTap: () async {
+        if (homeState.isClockActionLoading) return;
+
         if (homeState.isClockedIn) {
           final shouldClockOut = await showDialog<bool>(
             context: context,
@@ -990,9 +992,34 @@ class HomeScreen extends ConsumerWidget {
               );
             },
           );
-          if (shouldClockOut == true) homeNotifier.toggleClockStatus();
+
+          if (shouldClockOut == true) {
+            final result = await homeNotifier.toggleClockStatus();
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result.message),
+                backgroundColor: result.success ? Colors.green : Colors.red,
+              ),
+            );
+            if (result.success) {
+              homeNotifier.fetchDashboard();
+            }
+          }
         } else {
-          homeNotifier.toggleClockStatus();
+          final result = await homeNotifier.toggleClockStatus();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: result.success ? Colors.green : Colors.red,
+            ),
+          );
+          if (result.success) {
+            homeNotifier.fetchDashboard();
+          }
         }
       },
       child: AnimatedContainer(

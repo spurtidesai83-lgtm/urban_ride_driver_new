@@ -133,7 +133,9 @@ class ApiScheduleDetails {
 class ApiTrip {
   final int id;
   final String fromLocation;
+  final String fromUqId;
   final String toLocation;
+  final String toUqId;
   final String kms;
   final String startTime;
   final String endTime;
@@ -144,7 +146,9 @@ class ApiTrip {
   ApiTrip({
     required this.id,
     required this.fromLocation,
+    this.fromUqId = '',
     required this.toLocation,
+    this.toUqId = '',
     required this.kms,
     required this.startTime,
     required this.endTime,
@@ -157,7 +161,9 @@ class ApiTrip {
     return ApiTrip(
       id: json['id'] ?? 0,
       fromLocation: json['fromLocation'] ?? '',
+      fromUqId: (json['fromUqId'] ?? '').toString(),
       toLocation: json['toLocation'] ?? '',
+      toUqId: (json['toUqId'] ?? '').toString(),
       kms: json['kms']?.toString() ?? '0',
       startTime: json['startTime'] ?? '',
       endTime: json['endTime'] ?? '',

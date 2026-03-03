@@ -31,8 +31,26 @@ class VehicleDocumentsScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.black),
-            onPressed: () {
-              final _ = ref.refresh(documentVerificationProvider);
+            onPressed: () async {
+              try {
+                ref.invalidate(documentVerificationProvider);
+                await ref.read(documentVerificationProvider.future);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Vehicle documents refreshed'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString().replaceFirst('Exception: ', '')),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
           ),
         ],
@@ -91,7 +109,7 @@ class VehicleDocumentsScreen extends ConsumerWidget {
                 ),
               ),
               onPressed: () {
-                final _ = ref.refresh(documentVerificationProvider);
+                ref.invalidate(documentVerificationProvider);
               },
               child: const Text(
                 'Retry',

@@ -151,6 +151,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     List<DutyModel> duties,
     int currentDutyIndex, {
     bool isClockedIn = false,
+    bool allDutiesCompleted = false,
   }) async {
     print('📺 [ActivityProvider] Received ${duties.length} duties to process.');
 
@@ -200,7 +201,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     }
 
     // If not clocked in or API fails, use fallback to mark a duty as live
-    if (isClockedIn && !liveTripHandled) {
+    if (isClockedIn && !allDutiesCompleted && !liveTripHandled) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       
@@ -280,10 +281,16 @@ final activityProvider = StateNotifierProvider<ActivityNotifier, ActivityState>(
       homeState.allDuties,
       homeState.currentDutyIndex,
       isClockedIn: homeState.isClockedIn,
+      allDutiesCompleted: homeState.allDutiesCompleted,
     );
   } else {
     print('📺 [ActivityProvider] homeState.allDuties is empty, showing no trips');
-    notifier.updateTripsFromDuties([], 0, isClockedIn: homeState.isClockedIn);
+    notifier.updateTripsFromDuties(
+      [],
+      0,
+      isClockedIn: homeState.isClockedIn,
+      allDutiesCompleted: homeState.allDutiesCompleted,
+    );
   }
   
   return notifier;

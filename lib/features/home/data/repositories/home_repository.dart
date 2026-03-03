@@ -115,6 +115,8 @@ class HomeRepository {
             restTime: apiTrip.rest,
             tripKms: int.tryParse(apiTrip.kms) ?? 0,
             tripNo: apiTrip.id,
+            fromUqId: apiTrip.fromUqId,
+            toUqId: apiTrip.toUqId,
             stops: apiTrip.stops.map((s) => DutyStop(
               stopNumber: '',
               location: s.name,
@@ -183,6 +185,8 @@ class HomeRepository {
             restTime: apiTrip.rest,
             tripKms: int.tryParse(apiTrip.kms) ?? 0,
             tripNo: apiTrip.id,
+            fromUqId: apiTrip.fromUqId,
+            toUqId: apiTrip.toUqId,
             stops: apiTrip.stops.map((s) => DutyStop(
               stopNumber: '',
               location: s.name,
@@ -258,6 +262,8 @@ class HomeRepository {
                 restTime: apiTrip.rest,
                 tripKms: int.tryParse(apiTrip.kms) ?? 0,
                 tripNo: apiTrip.id,
+                fromUqId: apiTrip.fromUqId,
+                toUqId: apiTrip.toUqId,
                 stops: apiTrip.stops.map((s) => DutyStop(
                   stopNumber: '',
                   location: s.name,

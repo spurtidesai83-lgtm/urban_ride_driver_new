@@ -42,6 +42,25 @@ class TripApiService {
         return TripLogResponse.fromJson(jsonData);
       }
 
+      if (response.statusCode == 409) {
+        final message = (jsonData['message'] ?? '').toString();
+        if (_isIdempotentConflict(message)) {
+          return TripLogResponse(
+            success: true,
+            message: message.isNotEmpty
+                ? message
+                : 'Trip event already processed',
+          );
+        }
+
+        return TripLogResponse(
+          success: false,
+          message: message.isNotEmpty
+              ? message
+              : 'Trip log request failed (409)',
+        );
+      }
+
       // Return error response instead of throwing
       return TripLogResponse(
         success: false,
@@ -55,5 +74,13 @@ class TripApiService {
         message: 'Trip log request failed: $e',
       );
     }
+  }
+
+  bool _isIdempotentConflict(String message) {
+    final text = message.toLowerCase();
+    return text.contains('already') ||
+        text.contains('duplicate') ||
+        text.contains('exists') ||
+        text.contains('processed');
   }
 }

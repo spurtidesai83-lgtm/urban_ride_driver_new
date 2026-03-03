@@ -6,7 +6,9 @@ import 'package:urbandriver/features/home/data/models/duty_model.dart';
 import 'package:urbandriver/features/home/presentation/widgets/map_view.dart';
 import 'pin_entry_screen.dart';
 import 'trip_map_screen.dart';
+import 'pickup_navigation_screen.dart';
 import 'package:urbandriver/features/home/presentation/providers/home_provider.dart';
+import '../providers/pickup_provider.dart';
 
 class TripDetailsScreen extends ConsumerWidget {
   final String? tripId;
@@ -735,7 +737,7 @@ class TripDetailsScreen extends ConsumerWidget {
         ],
       ),
       child: ElevatedButton(
-        onPressed: () {
+        onPressed: () async {
           if (homeState.isLockedOutForToday) {
             ScaffoldMessenger.of(context).clearSnackBars();
             ScaffoldMessenger.of(context).showSnackBar(
@@ -760,6 +762,22 @@ class TripDetailsScreen extends ConsumerWidget {
               ),
             );
             return;
+          }
+
+          final activeDuty = duty ?? homeState.currentDuty;
+          if (activeDuty != null) {
+            await ref.read(pickupProvider.notifier).loadStopsFromDuty(activeDuty);
+            if (!context.mounted) return;
+            final pickupState = ref.read(pickupProvider);
+            if (pickupState.hasPersistedDutyProgress) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PickupNavigationScreen(),
+                ),
+              );
+              return;
+            }
           }
 
           Navigator.push(

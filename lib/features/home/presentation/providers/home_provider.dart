@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/duty_model.dart';
 import '../../data/models/driving_data_model.dart';
+import '../../data/models/clock_models.dart';
 import '../../data/repositories/home_repository.dart';
 import '../../../profile/data/models/profile_model.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
@@ -28,6 +30,7 @@ class HomeState {
   final int totalKms;
   final Position? driverPosition; // Driver's current location
   final bool isMapView; // Toggle between list and map view
+  final String? lastClockRouteIdentifier;
 
   HomeState({
     required this.currentDateIndex,
@@ -50,6 +53,7 @@ class HomeState {
     this.totalKms = 0,
     this.driverPosition,
     this.isMapView = false,
+    this.lastClockRouteIdentifier,
   });
 
   HomeState copyWith({
@@ -73,6 +77,7 @@ class HomeState {
     int? totalKms,
     Position? driverPosition,
     bool? isMapView,
+    String? lastClockRouteIdentifier,
   }) {
     return HomeState(
       currentDateIndex: currentDateIndex ?? this.currentDateIndex,
@@ -95,6 +100,8 @@ class HomeState {
       totalKms: totalKms ?? this.totalKms,
       driverPosition: driverPosition ?? this.driverPosition,
       isMapView: isMapView ?? this.isMapView,
+      lastClockRouteIdentifier:
+          lastClockRouteIdentifier ?? this.lastClockRouteIdentifier,
     );
   }
 
@@ -131,6 +138,7 @@ class HomeState {
 class HomeNotifier extends StateNotifier<HomeState> {
   final HomeRepository _repository;
   final Ref _ref;
+  static const String _lastClockRouteKey = 'home_last_clock_route';
 
   HomeNotifier(this._repository, this._ref) : super(HomeState(
     currentDateIndex: 0,
@@ -145,9 +153,136 @@ class HomeNotifier extends StateNotifier<HomeState> {
     totalKms: 0,
   )) {
     _listenProfileName();
+    _restoreLastClockRoute();
 
     // Load dashboard data from API (no mock data fallback)
     fetchDashboard();
+  }
+
+  Future<void> _restoreLastClockRoute() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final route = prefs.getString(_lastClockRouteKey)?.trim();
+      if (route != null && route.isNotEmpty && state.lastClockRouteIdentifier != route) {
+        state = state.copyWith(lastClockRouteIdentifier: route);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _persistLastClockRoute(String routeIdentifier) async {
+    final route = routeIdentifier.trim();
+    if (route.isEmpty) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastClockRouteKey, route);
+    } catch (_) {}
+  }
+
+  String? _bestRouteIdentifierFromDuty(DutyModel? duty) {
+    final routeCode = duty?.routeCode?.trim();
+    if (routeCode != null && routeCode.isNotEmpty) return routeCode;
+
+    final route = duty?.route.trim();
+    if (route != null && route.isNotEmpty) return route;
+
+    return null;
+  }
+
+  String? _resolveRouteIdentifierForClockOut() {
+    final currentDutyRoute = _bestRouteIdentifierFromDuty(state.currentDuty);
+    if (currentDutyRoute != null) return currentDutyRoute;
+
+    if (state.duties.isNotEmpty) {
+      final todayDutyRoute = _bestRouteIdentifierFromDuty(state.duties.first);
+      if (todayDutyRoute != null) return todayDutyRoute;
+    }
+
+    if (state.allDuties.isNotEmpty) {
+      final anyDutyRoute = _bestRouteIdentifierFromDuty(state.allDuties.first);
+      if (anyDutyRoute != null) return anyDutyRoute;
+    }
+
+    return state.lastClockRouteIdentifier;
+  }
+
+  List<String> _clockOutRouteCandidates() {
+    final candidates = <String>[];
+
+    void addCandidate(String? value) {
+      final candidate = value?.trim();
+      if (candidate == null || candidate.isEmpty) return;
+      if (!candidates.contains(candidate)) {
+        candidates.add(candidate);
+      }
+    }
+
+    addCandidate(_resolveRouteIdentifierForClockOut());
+    addCandidate(state.currentDuty?.dutyNo);
+    addCandidate(state.currentDuty?.route);
+
+    final today = DateTime.now();
+    final todayDuty = state.allDuties.where((duty) {
+      return duty.date.year == today.year &&
+          duty.date.month == today.month &&
+          duty.date.day == today.day;
+    }).toList();
+
+    if (todayDuty.isNotEmpty) {
+      final fallbackDuty = todayDuty.last;
+      addCandidate(fallbackDuty.routeCode);
+      addCandidate(fallbackDuty.route);
+      addCandidate(fallbackDuty.dutyNo);
+    }
+
+    addCandidate(state.lastClockRouteIdentifier);
+    return candidates;
+  }
+
+  bool _isRetryableClockOutError(String message) {
+    final error = message.toLowerCase();
+    return error.contains('500') ||
+        error.contains('internal server error') ||
+        error.contains('get-coordinates') ||
+        error.contains('external service error');
+  }
+
+  Future<ClockResponse> _clockOutWithFallback(double latitude, double longitude) async {
+    final identifiers = _clockOutRouteCandidates();
+    if (identifiers.isEmpty) {
+      throw Exception('Route identifier is required to clock out');
+    }
+
+    Exception? lastException;
+
+    for (final identifier in identifiers) {
+      try {
+        print('🟢 Clock Out - Trying identifier: $identifier');
+        final response = await _repository.clockOut(latitude, longitude, identifier);
+        if (response.success) {
+          return response;
+        }
+
+        if (_isRetryableClockOutError(response.message)) {
+          lastException = Exception(response.message);
+          continue;
+        }
+
+        return response;
+      } catch (e) {
+        if (_isRetryableClockOutError(e.toString())) {
+          lastException = Exception(e.toString());
+          continue;
+        }
+        rethrow;
+      }
+    }
+
+    if (lastException != null) {
+      throw lastException;
+    }
+
+    throw Exception('Clock out failed');
   }
 
   void _listenProfileName() {
@@ -212,6 +347,13 @@ class HomeNotifier extends StateNotifier<HomeState> {
       final dutiesToApply = shouldKeepExistingSchedules ? state.duties : finalDuties;
       final allDutiesToApply = shouldKeepExistingSchedules ? state.allDuties : allDutiesCombined;
 
+        final preservedDutyIndex = dutiesToApply.isEmpty
+          ? 0
+          : state.currentDutyIndex.clamp(0, dutiesToApply.length - 1);
+        final resolvedAllDutiesCompleted = state.allDutiesCompleted
+          ? dutiesToApply.isEmpty || preservedDutyIndex >= dutiesToApply.length - 1
+          : dutiesToApply.isEmpty && errorMsg == null;
+
       if (shouldKeepExistingSchedules) {
         print('⚠️ [HomeProvider] Schedule APIs unavailable, keeping last synced duties.');
       }
@@ -224,10 +366,17 @@ class HomeNotifier extends StateNotifier<HomeState> {
         totalKms: totalKms,
         duties: dutiesToApply,
         allDuties: allDutiesToApply,
-        currentDutyIndex: 0,
-        allDutiesCompleted: dutiesToApply.isEmpty && errorMsg == null,
+        currentDutyIndex: preservedDutyIndex,
+        allDutiesCompleted: resolvedAllDutiesCompleted,
         errorMessage: dutiesToApply.isEmpty && allDutiesToApply.isEmpty ? errorMsg : null,
+        lastClockRouteIdentifier: state.lastClockRouteIdentifier ??
+            _bestRouteIdentifierFromDuty(dutiesToApply.isNotEmpty ? dutiesToApply.first : null),
       );
+
+      final routeToPersist = state.lastClockRouteIdentifier;
+      if (routeToPersist != null && routeToPersist.isNotEmpty) {
+        _persistLastClockRoute(routeToPersist);
+      }
 
       print('🏠 [HomeProvider] Dashboard loaded. Today\'s duties: ${finalDuties.length}, Total unique duties: ${allDutiesCombined.length}');
 
@@ -402,7 +551,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
         
         // Use vehicle number if available, else fallback to a known test value
         // Get route code from current duty (R-45A format), fallback to route name
-        final routeIdentifier = state.currentDuty?.routeCode ?? state.currentDuty?.route;
+        final routeIdentifier = _bestRouteIdentifierFromDuty(state.currentDuty);
         
         print('🟢 Clock In - Using: $routeIdentifier (routeCode=${state.currentDuty?.routeCode}, route=${state.currentDuty?.route})');
         
@@ -425,10 +574,12 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
         if (response.success) {
           print('✅ Clock in successful!');
+          await _persistLastClockRoute(routeIdentifier);
           state = state.copyWith(
             isClockedIn: true,
             clockInManuallySet: false, // Reset flag since it's from API
             isClockActionLoading: false,
+            lastClockRouteIdentifier: routeIdentifier,
           );
           return const ClockActionResult(
             success: true,
@@ -493,7 +644,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
         // Get route identifier from current duty (R-45A format), fallback to route name
         print('🟢 Current duty: route="${state.currentDuty?.route}", routeCode="${state.currentDuty?.routeCode}"');
-        final routeIdentifier = state.currentDuty?.routeCode ?? state.currentDuty?.route;
+        final routeIdentifier = _resolveRouteIdentifierForClockOut();
         
         print('🟢 Clock Out - Using: $routeIdentifier (routeCode=${state.currentDuty?.routeCode}, route=${state.currentDuty?.route})');
         
@@ -506,11 +657,10 @@ class HomeNotifier extends StateNotifier<HomeState> {
           );
         }
 
-        // Call clock out API
-        final response = await _repository.clockOut(
+        // Call clock out API with fallbacks for backend route lookup failures
+        final response = await _clockOutWithFallback(
           position.latitude,
           position.longitude,
-          routeIdentifier,
         );
 
         if (response.success) {
@@ -577,7 +727,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
       }
 
       // Get route identifier from current duty (R-45A format), fallback to route name
-      final routeIdentifier = state.currentDuty?.routeCode ?? state.currentDuty?.route;
+      final routeIdentifier = _resolveRouteIdentifierForClockOut();
       
       print('🟢 Clock Out (Sync) - Route: ${state.currentDuty?.route}, RouteCode: ${state.currentDuty?.routeCode}, Using: $routeIdentifier');
       
@@ -590,11 +740,10 @@ class HomeNotifier extends StateNotifier<HomeState> {
         );
       }
 
-      // Call clock out API
-      final response = await _repository.clockOut(
+      // Call clock out API with fallbacks for backend route lookup failures
+      final response = await _clockOutWithFallback(
         position.latitude,
         position.longitude,
-        routeIdentifier,
       );
 
       if (response.success) {
@@ -649,17 +798,30 @@ class HomeNotifier extends StateNotifier<HomeState> {
   }
 
   void completeCurrentDuty() {
-    if (state.currentDutyIndex < state.duties.length - 1) {
-      // Move to next duty
+    if (state.duties.isEmpty) {
+      state = state.copyWith(allDutiesCompleted: true, currentDutyIndex: 0);
+      return;
+    }
+
+    final activeDuties = List<DutyModel>.from(state.duties);
+    final removeIndex = state.currentDutyIndex.clamp(0, activeDuties.length - 1);
+    activeDuties.removeAt(removeIndex);
+
+    if (activeDuties.isEmpty) {
       state = state.copyWith(
-        currentDutyIndex: state.currentDutyIndex + 1,
-      );
-    } else {
-      // Last duty completed - set flag
-      state = state.copyWith(
+        duties: activeDuties,
+        currentDutyIndex: 0,
         allDutiesCompleted: true,
       );
+      return;
     }
+
+    final nextIndex = removeIndex.clamp(0, activeDuties.length - 1);
+    state = state.copyWith(
+      duties: activeDuties,
+      currentDutyIndex: nextIndex,
+      allDutiesCompleted: false,
+    );
   }
 
   // Toggle between map and list view

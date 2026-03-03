@@ -79,6 +79,11 @@ class PickupState {
   final double endLatitude;
   final double endLongitude;
   final String endScheduledTime;
+  final Set<String> loggedCheckpointUqIds;
+  final bool hasEndedTrip;
+  final bool isStartingTrip;
+  final bool isEndingTrip;
+  final bool startTripFailed;
 
   PickupState({
     required this.stops,
@@ -98,6 +103,11 @@ class PickupState {
     this.endLatitude = 0.0,
     this.endLongitude = 0.0,
     this.endScheduledTime = '',
+    this.loggedCheckpointUqIds = const <String>{},
+    this.hasEndedTrip = false,
+    this.isStartingTrip = false,
+    this.isEndingTrip = false,
+    this.startTripFailed = false,
   });
 
   PickupState copyWith({
@@ -118,6 +128,11 @@ class PickupState {
     double? endLatitude,
     double? endLongitude,
     String? endScheduledTime,
+    Set<String>? loggedCheckpointUqIds,
+    bool? hasEndedTrip,
+    bool? isStartingTrip,
+    bool? isEndingTrip,
+    bool? startTripFailed,
   }) {
     return PickupState(
       stops: stops ?? this.stops,
@@ -137,6 +152,11 @@ class PickupState {
       endLatitude: endLatitude ?? this.endLatitude,
       endLongitude: endLongitude ?? this.endLongitude,
       endScheduledTime: endScheduledTime ?? this.endScheduledTime,
+      loggedCheckpointUqIds: loggedCheckpointUqIds ?? this.loggedCheckpointUqIds,
+      hasEndedTrip: hasEndedTrip ?? this.hasEndedTrip,
+      isStartingTrip: isStartingTrip ?? this.isStartingTrip,
+      isEndingTrip: isEndingTrip ?? this.isEndingTrip,
+      startTripFailed: startTripFailed ?? this.startTripFailed,
     );
   }
 
@@ -157,11 +177,18 @@ class PickupState {
   int get completedStopsCount {
     return stops.where((stop) => stop.isPickedUp).length;
   }
+
+  bool get hasPersistedDutyProgress {
+    return hasStartedTrip ||
+        currentStopIndex > 0 ||
+        stops.any((stop) => stop.isArrived || stop.isPickedUp);
+  }
 }
 
 class PickupNotifier extends StateNotifier<PickupState> {
   final TripRepository _repository;
-  static const String _progressPrefix = 'pickup_progress_';
+  // Bumping version to v3 to invalidate stale test data
+  static const String _progressPrefix = 'pickup_progress_v3_';
 
   PickupNotifier(this._repository)
       : super(PickupState(
@@ -169,7 +196,7 @@ class PickupNotifier extends StateNotifier<PickupState> {
         ));
 
   // Load stops from a duty
-  void loadStopsFromDuty(DutyModel? duty) {
+  Future<void> loadStopsFromDuty(DutyModel? duty) async {
     print('📦 [pickup_provider] loadStopsFromDuty called with: ${duty?.from} → ${duty?.to}');
     if (duty == null) {
       print('❌ [pickup_provider] Duty is null!');
@@ -198,9 +225,7 @@ class PickupNotifier extends StateNotifier<PickupState> {
       stops: pickupStops,
       currentStopIndex: 0,
       progressKey: progressKey,
-      dutyNo: (duty.routeCode != null && duty.routeCode!.isNotEmpty)
-          ? duty.routeCode!
-          : (duty.route.isNotEmpty ? duty.route : duty.dutyNo),
+      dutyNo: duty.dutyNo,
       tripStartTime: '',
       hasStartedTrip: false,
       tripNo: duty.tripNo ?? 0,
@@ -216,13 +241,25 @@ class PickupNotifier extends StateNotifier<PickupState> {
       endScheduledTime: duty.closeTime,
     );
 
-    _restoreSavedProgress();
+    await _restoreSavedProgress();
   }
 
   String _buildDutyProgressKey(DutyModel duty) {
-    final datePart = '${duty.date.year}-${duty.date.month}-${duty.date.day}';
-    final tripPart = (duty.tripNo ?? 0).toString();
-    return '${duty.dutyNo}_${tripPart}_$datePart';
+    String clean(String value) {
+      return value.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '_');
+    }
+
+    final datePart = '${duty.date.year.toString().padLeft(4, '0')}-'
+        '${duty.date.month.toString().padLeft(2, '0')}-'
+        '${duty.date.day.toString().padLeft(2, '0')}';
+    final tripPart = duty.tripNo?.toString() ?? 'NA';
+    final dutyPart = clean(duty.dutyNo);
+    final routePart = clean((duty.routeCode ?? duty.route).isNotEmpty ? (duty.routeCode ?? duty.route) : 'NA');
+    final joinPart = clean(duty.joiningTime);
+    final fromPart = clean((duty.fromUqId ?? duty.from).isNotEmpty ? (duty.fromUqId ?? duty.from) : 'NA');
+    final toPart = clean((duty.toUqId ?? duty.to).isNotEmpty ? (duty.toUqId ?? duty.to) : 'NA');
+
+    return '${dutyPart}_${routePart}_${tripPart}_${joinPart}_${fromPart}_${toPart}_$datePart';
   }
 
   Future<void> _restoreSavedProgress() async {
@@ -239,6 +276,17 @@ class PickupNotifier extends StateNotifier<PickupState> {
       final savedStops = decoded['stops'];
       final hasStartedTrip = decoded['hasStartedTrip'] == true;
       final tripStartTime = (decoded['tripStartTime'] ?? '').toString();
+      final hasEndedTrip = decoded['hasEndedTrip'] == true;
+      final loggedCheckpointsRaw = decoded['loggedCheckpointUqIds'];
+      final loggedCheckpointUqIds = <String>{};
+      if (loggedCheckpointsRaw is List) {
+        for (final item in loggedCheckpointsRaw) {
+          final value = item?.toString().trim() ?? '';
+          if (value.isNotEmpty) {
+            loggedCheckpointUqIds.add(value);
+          }
+        }
+      }
 
       var restoredStops = List<PickupStop>.from(state.stops);
 
@@ -261,6 +309,8 @@ class PickupNotifier extends StateNotifier<PickupState> {
         currentStopIndex: nextIndex == -1 ? restoredStops.length : nextIndex,
         hasStartedTrip: hasStartedTrip || restoredStops.any((s) => s.isPickedUp || s.isArrived),
         tripStartTime: tripStartTime,
+        hasEndedTrip: hasEndedTrip,
+        loggedCheckpointUqIds: loggedCheckpointUqIds,
       );
 
       print('✅ [pickup_provider] Restored progress for ${state.progressKey}. Completed: ${state.completedStopsCount}/${state.stops.length}');
@@ -277,8 +327,10 @@ class PickupNotifier extends StateNotifier<PickupState> {
       final data = {
         'progressKey': state.progressKey,
         'hasStartedTrip': state.hasStartedTrip,
+        'hasEndedTrip': state.hasEndedTrip,
         'tripStartTime': state.tripStartTime,
         'currentStopIndex': state.currentStopIndex,
+        'loggedCheckpointUqIds': state.loggedCheckpointUqIds.toList(),
         'stops': state.stops
             .map((stop) => {
                   'isArrived': stop.isArrived,
@@ -294,39 +346,57 @@ class PickupNotifier extends StateNotifier<PickupState> {
   }
 
   Future<void> startTripIfNeeded() async {
-    if (state.hasStartedTrip || state.dutyNo.isEmpty) {
+    // Guard: skip if already started, currently starting, failed once, or missing duty
+    if (state.hasStartedTrip ||
+        state.isStartingTrip ||
+        state.startTripFailed ||
+        state.dutyNo.isEmpty) {
       return;
     }
 
-    if (state.startCheckpointName.isEmpty) return;
+    // Always use the duty's starting terminal checkpoint (fromUqId / pickupLatitude)
+    // NOT the first passenger stop — backend verifies against the route's terminal coords
+    final checkpointName = state.startCheckpointName.trim();
+    if (checkpointName.isEmpty) return;
+
+    final scheduledTime = state.startScheduledTime.trim();
+    final uqId = state.startCheckpointUqId.trim();
+    final latitude = state.startLatitude;
+    final longitude = state.startLongitude;
 
     final now = DateTime.now();
     final request = TripLogRequest(
       dutyNo: state.dutyNo,
       tripNo: state.tripNo,
-      checkpointName: state.startCheckpointName,
-      scheduledTime: _formatScheduledTime(state.startScheduledTime),
+      checkpointName: checkpointName,
+      scheduledTime: _formatScheduledTime(scheduledTime),
       loggedTime: _formatTime24(now),
-      uqId: state.startCheckpointUqId,
-      latitude: state.startLatitude,
-      longitude: state.startLongitude,
+      uqId: uqId,
+      latitude: latitude,
+      longitude: longitude,
     );
 
-    print('🚗 [PickupProvider] Starting trip for duty: ${state.dutyNo}');
+    state = state.copyWith(isStartingTrip: true);
+    print('🚗 [PickupProvider] Starting trip for duty: ${state.dutyNo}, uqId: $uqId, lat: $latitude, lng: $longitude');
     final response = await _repository.startTrip(request);
-    
+
     if (response.success) {
       print('✅ [PickupProvider] Trip started successfully');
       state = state.copyWith(
         hasStartedTrip: true,
         tripStartTime: _formatTime24(now),
+        isStartingTrip: false,
+        startTripFailed: false,
       );
     } else {
       print('⚠️ [PickupProvider] Trip start failed: ${response.message}');
-      // Still mark as started to allow flow to continue
+      // Set startTripFailed=true so we do NOT retry on every markArrived() call.
+      // Still set tripStartTime so log-trip and end-trips can proceed.
       state = state.copyWith(
-        hasStartedTrip: true,
+        hasStartedTrip: false,
         tripStartTime: _formatTime24(now),
+        isStartingTrip: false,
+        startTripFailed: true,
       );
     }
 
@@ -404,13 +474,21 @@ class PickupNotifier extends StateNotifier<PickupState> {
     state = state.copyWith(stops: updatedStops);
     await _saveProgress();
 
-    if (state.dutyNo.isNotEmpty && state.tripStartTime.isNotEmpty) {
+    if (state.dutyNo.isNotEmpty &&
+        !state.loggedCheckpointUqIds.contains(currentStop.uqId)) {
       final loggedTime = DateTime.now().toIso8601String();
       final request = _buildTripLogRequest(currentStop, loggedTime);
       print('🚗 [PickupProvider] Logging trip checkpoint: ${currentStop.location}');
       final response = await _repository.logTrip(request);
       if (response.success) {
         print('✅ [PickupProvider] Trip checkpoint logged');
+        state = state.copyWith(
+          loggedCheckpointUqIds: {
+            ...state.loggedCheckpointUqIds,
+            currentStop.uqId,
+          },
+        );
+        await _saveProgress();
       } else {
         print('⚠️ [PickupProvider] Trip checkpoint log failed: ${response.message}');
       }
@@ -452,28 +530,43 @@ class PickupNotifier extends StateNotifier<PickupState> {
   }
 
   Future<void> endTrip() async {
-    if (state.dutyNo.isEmpty || state.tripStartTime.isEmpty || state.endCheckpointName.isEmpty) {
+    if (state.dutyNo.isEmpty ||
+        state.endCheckpointName.isEmpty ||
+        state.hasEndedTrip ||
+        state.isEndingTrip) {
       return;
     }
 
     final now = DateTime.now();
+    // Always use the duty's ending terminal checkpoint (toUqId / dropLatitude)
+    // NOT the last passenger stop — backend verifies against the route's terminal coords
+    final checkpointName = state.endCheckpointName.trim();
+    final scheduledTime = state.endScheduledTime.trim();
+    final uqId = state.endCheckpointUqId.trim();
+    final latitude = state.endLatitude;
+    final longitude = state.endLongitude;
+
     final request = TripLogRequest(
       dutyNo: state.dutyNo,
       tripNo: state.tripNo,
-      checkpointName: state.endCheckpointName,
-      scheduledTime: _formatScheduledTime(state.endScheduledTime),
+      checkpointName: checkpointName,
+      scheduledTime: _formatScheduledTime(scheduledTime),
       loggedTime: _formatTime24(now),
-      uqId: state.endCheckpointUqId,
-      latitude: state.endLatitude,
-      longitude: state.endLongitude,
+      uqId: uqId,
+      latitude: latitude,
+      longitude: longitude,
     );
+    state = state.copyWith(isEndingTrip: true);
     print('🚗 [PickupProvider] Ending trip for duty: ${state.dutyNo}');
     final response = await _repository.endTrip(request);
-    
+
     if (response.success) {
       print('✅ [PickupProvider] Trip ended successfully');
+      state = state.copyWith(hasEndedTrip: true, isEndingTrip: false);
+      await _saveProgress();
     } else {
       print('⚠️ [PickupProvider] Trip end failed: ${response.message}');
+      state = state.copyWith(isEndingTrip: false);
     }
   }
 
