@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class DirectionsService {
@@ -13,6 +14,11 @@ class DirectionsService {
     required double destLat,
     required double destLng,
   }) async {
+    if (kIsWeb) {
+      print('🌐 Web detected: skipping Directions REST call to avoid CORS; using straight-line route');
+      return _fallbackStraightLine(originLat, originLng, destLat, destLng);
+    }
+
     try {
       final url = Uri.parse(
         '$_baseUrl?origin=$originLat,$originLng&destination=$destLat,$destLng&mode=driving&key=$_apiKey',

@@ -145,21 +145,8 @@ class HomeRepository {
     final now = DateTime.now();
     final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
 
-    // Check for explicit "OFF" key which means day off
+    // Check for explicit "OFF" key which means no duties for tomorrow
     if (tomorrowResponse.data.containsKey('OFF')) {
-      // Create a dummy duty to represent the day off
-      duties.add(DutyModel(
-        dutyNo: 'OFF',
-        route: 'Day Off',
-        from: '',
-        to: '',
-        joiningTime: '',
-        closeTime: '',
-        isCompleted: true,
-        date: tomorrow,
-        serviceType: 'OFF', // Special marker
-        tripNo: 0,
-      ));
       return duties;
     }
 
@@ -223,21 +210,9 @@ class HomeRepository {
           return; // Skip this entry if date is invalid
         }
 
-        // Check for Explicit OFF day in weekly schedule
+        // Explicit OFF day means no duties for this date
         if (scheduleMap.containsKey('OFF')) {
-          duties.add(DutyModel(
-            dutyNo: 'OFF',
-            route: 'Day Off',
-            from: '',
-            to: '',
-            joiningTime: '',
-            closeTime: '',
-            isCompleted: true,
-            date: scheduleDate!,
-            serviceType: 'OFF',
-            tripNo: 0,
-          ));
-          return; // No other duties for this day if it's OFF
+          return;
         }
 
         scheduleMap.forEach((dutyKey, dutyList) {
@@ -288,124 +263,4 @@ class HomeRepository {
     return duties;
   }
 
-  // Get all duties (for backward compatibility with mock data)
-  List<DutyModel> getAllDuties() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final dayAfter = today.add(const Duration(days: 2));
-    
-    return [
-      DutyModel(
-        dutyNo: 'UR-2024-001',
-        route: 'Route 101',
-        from: 'Mumbai Central',
-        to: 'Pune Station',
-        joiningTime: '07:30 AM',
-        closeTime: '11:00 AM',
-        isCompleted: false,
-        date: today,
-        pickupLatitude: 19.0876,
-        pickupLongitude: 72.8691,
-        pickupAddress: 'Mumbai Central Station',
-        dropLatitude: 18.5204,
-        dropLongitude: 73.8567,
-        dropAddress: 'Pune Train Station',
-        stops: [
-          DutyStop(stopNumber: '1', location: 'Mumbai Central', passengers: '12', timeWindow: '07:30 AM', distance: '0 km'),
-          DutyStop(stopNumber: '2', location: 'Panvel', passengers: '8', timeWindow: '08:45 AM', distance: '42 km'),
-          DutyStop(stopNumber: '3', location: 'Lonavala', passengers: '15', timeWindow: '09:30 AM', distance: '64 km'),
-          DutyStop(stopNumber: '4', location: 'Pune Station', passengers: '10', timeWindow: '11:00 AM', distance: '120 km'),
-        ],
-      ),
-      DutyModel(
-        dutyNo: 'UR-2024-002',
-        route: 'Route 102',
-        from: 'Pune Station',
-        to: 'Mumbai Central',
-        joiningTime: '02:00 PM',
-        closeTime: '05:15 PM',
-        isCompleted: false,
-        date: today,
-        pickupLatitude: 18.5204,
-        pickupLongitude: 73.8567,
-        pickupAddress: 'Pune Train Station',
-        dropLatitude: 19.0876,
-        dropLongitude: 72.8691,
-        dropAddress: 'Mumbai Central Station',
-        stops: [
-          DutyStop(stopNumber: '1', location: 'Pune Station', passengers: '10', timeWindow: '02:00 PM', distance: '0 km'),
-          DutyStop(stopNumber: '2', location: 'Lonavala', passengers: '12', timeWindow: '03:15 PM', distance: '56 km'),
-          DutyStop(stopNumber: '3', location: 'Panvel', passengers: '6', timeWindow: '04:00 PM', distance: '78 km'),
-          DutyStop(stopNumber: '4', location: 'Mumbai Central', passengers: '10', timeWindow: '05:15 PM', distance: '120 km'),
-        ],
-      ),
-      DutyModel(
-        dutyNo: 'UR-2024-003',
-        route: 'Route 103',
-        from: 'Mumbai Airport T2',
-        to: 'Thane Station',
-        joiningTime: '06:00 AM',
-        closeTime: '07:45 AM',
-        isCompleted: false,
-        date: tomorrow,
-        pickupLatitude: 19.0986,
-        pickupLongitude: 72.8194,
-        pickupAddress: 'Mumbai Airport Terminal 2',
-        dropLatitude: 19.2183,
-        dropLongitude: 72.9781,
-        dropAddress: 'Thane Railway Station',
-        stops: [
-          DutyStop(stopNumber: '1', location: 'Mumbai Airport T2', passengers: '5', timeWindow: '06:00 AM', distance: '0 km'),
-          DutyStop(stopNumber: '2', location: 'Powai', passengers: '6', timeWindow: '06:30 AM', distance: '8 km'),
-          DutyStop(stopNumber: '3', location: 'Ghodbunder Road', passengers: '4', timeWindow: '07:15 AM', distance: '18 km'),
-          DutyStop(stopNumber: '4', location: 'Thane Station', passengers: '3', timeWindow: '07:45 AM', distance: '25 km'),
-        ],
-      ),
-      DutyModel(
-        dutyNo: 'UR-2024-004',
-        route: 'Route 104',
-        from: 'Thane Station',
-        to: 'Mumbai Airport T2',
-        joiningTime: '10:30 AM',
-        closeTime: '12:15 PM',
-        isCompleted: false,
-        date: tomorrow,
-        pickupLatitude: 19.2183,
-        pickupLongitude: 72.9781,
-        pickupAddress: 'Thane Railway Station',
-        dropLatitude: 19.0986,
-        dropLongitude: 72.8194,
-        dropAddress: 'Mumbai Airport Terminal 2',
-        stops: [
-          DutyStop(stopNumber: '1', location: 'Thane Station', passengers: '7', timeWindow: '10:30 AM', distance: '0 km'),
-          DutyStop(stopNumber: '2', location: 'Ghodbunder Road', passengers: '5', timeWindow: '11:00 AM', distance: '7 km'),
-          DutyStop(stopNumber: '3', location: 'Powai', passengers: '6', timeWindow: '11:45 AM', distance: '17 km'),
-          DutyStop(stopNumber: '4', location: 'Mumbai Airport T2', passengers: '4', timeWindow: '12:15 PM', distance: '25 km'),
-        ],
-      ),
-      DutyModel(
-        dutyNo: 'UR-2024-005',
-        route: 'Route 105',
-        from: 'Mumbai Central',
-        to: 'Nashik CBS',
-        joiningTime: '08:00 AM',
-        closeTime: '12:00 PM',
-        isCompleted: false,
-        date: dayAfter,
-        pickupLatitude: 19.0876,
-        pickupLongitude: 72.8691,
-        pickupAddress: 'Mumbai Central Station',
-        dropLatitude: 19.9975,
-        dropLongitude: 73.7898,
-        dropAddress: 'Nashik CBS Bus Stand',
-        stops: [
-          DutyStop(stopNumber: '1', location: 'Mumbai Central', passengers: '15', timeWindow: '08:00 AM', distance: '0 km'),
-          DutyStop(stopNumber: '2', location: 'Kalyan', passengers: '10', timeWindow: '09:15 AM', distance: '54 km'),
-          DutyStop(stopNumber: '3', location: 'Igatpuri', passengers: '8', timeWindow: '10:30 AM', distance: '120 km'),
-          DutyStop(stopNumber: '4', location: 'Nashik CBS', passengers: '9', timeWindow: '12:00 PM', distance: '167 km'),
-        ],
-      ),
-    ];
-  }
 }
