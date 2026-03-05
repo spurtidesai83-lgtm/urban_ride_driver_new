@@ -104,6 +104,7 @@ class HomeRepository {
           final duty = DutyModel(
             dutyNo: details.scheduleDutyNo,
             route: details.routeNo,
+            routeCode: details.routeCode,
             from: apiTrip.fromLocation,
             to: apiTrip.toLocation,
             joiningTime: apiTrip.startTime,
@@ -161,6 +162,7 @@ class HomeRepository {
           final duty = DutyModel(
             dutyNo: details.scheduleDutyNo,
             route: details.routeNo,
+            routeCode: details.routeCode,
             from: apiTrip.fromLocation,
             to: apiTrip.toLocation,
             joiningTime: apiTrip.startTime,
@@ -226,6 +228,7 @@ class HomeRepository {
               final duty = DutyModel(
                 dutyNo: details.scheduleDutyNo,
                 route: details.routeNo,
+                routeCode: details.routeCode,
                 from: apiTrip.fromLocation,
                 to: apiTrip.toLocation,
                 joiningTime: apiTrip.startTime,

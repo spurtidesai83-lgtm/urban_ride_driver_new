@@ -239,6 +239,87 @@ class HomeNotifier extends StateNotifier<HomeState> {
     return candidates;
   }
 
+  List<String> _clockInRouteCandidates() {
+    final candidates = <String>[];
+
+    void addCandidate(String? value) {
+      final candidate = value?.trim();
+      if (candidate == null || candidate.isEmpty) return;
+      if (!candidates.contains(candidate)) {
+        candidates.add(candidate);
+      }
+    }
+
+    addCandidate(_bestRouteIdentifierFromDuty(state.currentDuty));
+    addCandidate(state.currentDuty?.route);
+    addCandidate(state.currentDuty?.dutyNo);
+
+    final today = DateTime.now();
+    final todayDuty = state.allDuties.where((duty) {
+      return duty.date.year == today.year &&
+          duty.date.month == today.month &&
+          duty.date.day == today.day;
+    }).toList();
+
+    if (todayDuty.isNotEmpty) {
+      final fallbackDuty = todayDuty.first;
+      addCandidate(fallbackDuty.routeCode);
+      addCandidate(fallbackDuty.route);
+      addCandidate(fallbackDuty.dutyNo);
+    }
+
+    addCandidate(state.lastClockRouteIdentifier);
+    return candidates;
+  }
+
+  bool _isRetryableClockInError(String message) {
+    final error = message.toLowerCase();
+    if (error.contains('401') || error.contains('unauthorized') || error.contains('token')) {
+      return false;
+    }
+
+    return error.contains('400') ||
+        error.contains('bad request') ||
+        error.contains('route') ||
+        error.contains('identifier') ||
+        error.contains('invalid') ||
+        error.contains('not found') ||
+        error.contains('500') ||
+        error.contains('internal server error');
+  }
+
+  Future<(ClockResponse, String)> _clockInWithFallback(
+    double latitude,
+    double longitude,
+  ) async {
+    final identifiers = _clockInRouteCandidates();
+    if (identifiers.isEmpty) {
+      throw Exception('Route identifier is required to clock in');
+    }
+
+    Exception? lastException;
+
+    for (final identifier in identifiers) {
+      try {
+        print('🟢 Clock In - Trying identifier: $identifier');
+        final response = await _repository.clockIn(latitude, longitude, identifier);
+        return (response, identifier);
+      } catch (e) {
+        if (_isRetryableClockInError(e.toString())) {
+          lastException = Exception(e.toString());
+          continue;
+        }
+        rethrow;
+      }
+    }
+
+    if (lastException != null) {
+      throw lastException;
+    }
+
+    throw Exception('Clock in failed');
+  }
+
   bool _isRetryableClockOutError(String message) {
     final error = message.toLowerCase();
     return error.contains('500') ||
@@ -549,13 +630,10 @@ class HomeNotifier extends StateNotifier<HomeState> {
         print('🟢 Calling clock in API...');
         print('🟢 Current duty: route="${state.currentDuty?.route}", routeCode="${state.currentDuty?.routeCode}"');
         
-        // Use vehicle number if available, else fallback to a known test value
-        // Get route code from current duty (R-45A format), fallback to route name
-        final routeIdentifier = _bestRouteIdentifierFromDuty(state.currentDuty);
-        
-        print('🟢 Clock In - Using: $routeIdentifier (routeCode=${state.currentDuty?.routeCode}, route=${state.currentDuty?.route})');
-        
-        if (routeIdentifier == null || routeIdentifier.isEmpty) {
+        final routeCandidates = _clockInRouteCandidates();
+        print('🟢 Clock In - Candidates: $routeCandidates (routeCode=${state.currentDuty?.routeCode}, route=${state.currentDuty?.route}, dutyNo=${state.currentDuty?.dutyNo})');
+
+        if (routeCandidates.isEmpty) {
           print('🔴 Route identifier is required for clock in');
           state = state.copyWith(isClockActionLoading: false);
           return const ClockActionResult(
@@ -564,22 +642,21 @@ class HomeNotifier extends StateNotifier<HomeState> {
           );
         }
 
-        // Call clock in API
-        final response = await _repository.clockIn(
+        // Call clock in API with route identifier fallbacks
+        final (response, usedRouteIdentifier) = await _clockInWithFallback(
           position.latitude,
           position.longitude,
-          routeIdentifier,
         );
         print('🟢 API Response: success=${response.success}, message=${response.message}');
 
         if (response.success) {
           print('✅ Clock in successful!');
-          await _persistLastClockRoute(routeIdentifier);
+          await _persistLastClockRoute(usedRouteIdentifier);
           state = state.copyWith(
             isClockedIn: true,
             clockInManuallySet: false, // Reset flag since it's from API
             isClockActionLoading: false,
-            lastClockRouteIdentifier: routeIdentifier,
+            lastClockRouteIdentifier: usedRouteIdentifier,
           );
           return const ClockActionResult(
             success: true,

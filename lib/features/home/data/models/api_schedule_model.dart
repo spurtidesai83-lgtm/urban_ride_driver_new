@@ -102,6 +102,7 @@ class ApiScheduleDetails {
   final String scheduleDutyNo;
   final String serviceType;
   final String routeNo;
+  final String? routeCode;
   final List<ApiTrip> trips;
 
   ApiScheduleDetails({
@@ -109,6 +110,7 @@ class ApiScheduleDetails {
     required this.scheduleDutyNo,
     required this.serviceType,
     required this.routeNo,
+    this.routeCode,
     required this.trips,
   });
 
@@ -124,6 +126,7 @@ class ApiScheduleDetails {
       scheduleDutyNo: json['scheduleDutyNo'] ?? '',
       serviceType: json['serviceType'] ?? 'N/A',
       routeNo: json['routeNo'] ?? '',
+      routeCode: (json['routeCode'] ?? json['route_code'] ?? json['dutyNo'])?.toString(),
       trips: tripsList,
     );
   }

@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import '../../../home/data/models/duty_model.dart';
+import '../../../home/presentation/providers/home_provider.dart';
 import '../../../home/presentation/widgets/map_view.dart';
 import '../../presentation/providers/pickup_provider.dart';
 
@@ -275,7 +276,12 @@ class _TripMapScreenState extends ConsumerState<TripMapScreen> {
                         if (!nextStop.isArrived)
                           ElevatedButton(
                             onPressed: () {
-                              ref.read(pickupProvider.notifier).markArrived();
+                              final homeState = ref.read(homeProvider);
+                              final currentPosition = _liveDriverPosition ?? widget.driverPosition ?? homeState.driverPosition;
+                              ref.read(pickupProvider.notifier).markArrived(
+                                    latitude: currentPosition?.latitude,
+                                    longitude: currentPosition?.longitude,
+                                  );
                             },
                             child: const Text('Arrive'),
                           ),

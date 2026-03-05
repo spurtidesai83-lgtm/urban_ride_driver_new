@@ -147,6 +147,10 @@ class ScheduleApiService {
   Future<ClockResponse> clockIn(ClockInRequest request) async {
     try {
       final token = await StorageService.getToken();
+      final tokenType = await StorageService.getTokenType();
+      if (token == null || token.trim().isEmpty) {
+        throw Exception('Missing auth token. Please login again.');
+      }
       final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.clockInEndpoint));
       final body = request.toJson();
       
@@ -155,7 +159,7 @@ class ScheduleApiService {
       
       final response = await http.post(
         url,
-        headers: ApiConfig.getHeaders(token: token),
+        headers: ApiConfig.getHeaders(token: token, tokenType: tokenType),
         body: jsonEncode(body),
       ).timeout(ApiConfig.connectTimeout);
 
@@ -176,11 +180,12 @@ class ScheduleApiService {
   Future<ClockResponse> clockOut(ClockOutRequest request) async {
     try {
       final token = await StorageService.getToken();
+      final tokenType = await StorageService.getTokenType();
       final url = Uri.parse(ApiConfig.buildUrl(ApiConfig.clockOutEndpoint));
       
       final response = await http.post(
         url,
-        headers: ApiConfig.getHeaders(token: token),
+        headers: ApiConfig.getHeaders(token: token, tokenType: tokenType),
         body: jsonEncode(request.toJson()),
       ).timeout(ApiConfig.connectTimeout);
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:urbandriver/features/home/data/models/duty_model.dart';
 import '../../data/models/trip_log_models.dart';
@@ -221,11 +222,16 @@ class PickupNotifier extends StateNotifier<PickupState> {
 
     print('✅ [pickup_provider] Created ${pickupStops.length} pickup stops');
     final progressKey = _buildDutyProgressKey(duty);
+    final routeCode = duty.routeCode?.trim();
+    final route = duty.route.trim();
+    final tripDutyNo = (routeCode != null && routeCode.isNotEmpty)
+      ? routeCode
+      : (route.isNotEmpty ? route : duty.dutyNo.trim());
     state = PickupState(
       stops: pickupStops,
       currentStopIndex: 0,
       progressKey: progressKey,
-      dutyNo: duty.dutyNo,
+      dutyNo: tripDutyNo,
       tripStartTime: '',
       hasStartedTrip: false,
       tripNo: duty.tripNo ?? 0,
@@ -444,7 +450,12 @@ class PickupNotifier extends StateNotifier<PickupState> {
     return scheduledTime;
   }
 
-  TripLogRequest _buildTripLogRequest(PickupStop stop, String loggedTime) {
+  TripLogRequest _buildTripLogRequest(
+    PickupStop stop,
+    String loggedTime, {
+    required double latitude,
+    required double longitude,
+  }) {
     final formattedLoggedTime = _formatTime24(DateTime.parse(loggedTime));
 
     return TripLogRequest(
@@ -454,12 +465,39 @@ class PickupNotifier extends StateNotifier<PickupState> {
       scheduledTime: _formatScheduledTime(stop.scheduledTime),
       loggedTime: formattedLoggedTime,
       uqId: stop.uqId,
-      latitude: stop.latitude,
-      longitude: stop.longitude,
+      latitude: latitude,
+      longitude: longitude,
     );
   }
 
-  Future<void> markArrived() async {
+  Future<Position?> _getCurrentPositionForLogTrip() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return null;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+        timeLimit: const Duration(seconds: 8),
+      );
+    } catch (e) {
+      print('⚠️ [PickupProvider] Could not fetch live location for log-trip: $e');
+      return null;
+    }
+  }
+
+  Future<void> markArrived({double? latitude, double? longitude}) async {
     final currentStop = state.currentStop;
     if (currentStop == null) return;
     if (currentStop.isPickedUp || currentStop.isArrived) {
@@ -477,8 +515,18 @@ class PickupNotifier extends StateNotifier<PickupState> {
     if (state.dutyNo.isNotEmpty &&
         !state.loggedCheckpointUqIds.contains(currentStop.uqId)) {
       final loggedTime = DateTime.now().toIso8601String();
-      final request = _buildTripLogRequest(currentStop, loggedTime);
-      print('🚗 [PickupProvider] Logging trip checkpoint: ${currentStop.location}');
+      final livePosition = (latitude != null && longitude != null)
+          ? null
+          : await _getCurrentPositionForLogTrip();
+      final resolvedLatitude = latitude ?? livePosition?.latitude ?? currentStop.latitude;
+      final resolvedLongitude = longitude ?? livePosition?.longitude ?? currentStop.longitude;
+      final request = _buildTripLogRequest(
+        currentStop,
+        loggedTime,
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
+      );
+      print('🚗 [PickupProvider] Logging trip checkpoint: ${currentStop.location} @ ($resolvedLatitude, $resolvedLongitude)');
       final response = await _repository.logTrip(request);
       if (response.success) {
         print('✅ [PickupProvider] Trip checkpoint logged');

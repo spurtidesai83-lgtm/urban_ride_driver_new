@@ -36,15 +36,23 @@ class TripApiService {
       print('🚗 [TripAPI] Response status: ${response.statusCode}');
       print('🚗 [TripAPI] Response body: ${response.body}');
 
-      final jsonData = jsonDecode(response.body);
+      final jsonData = _decodeBody(response.body);
+      final message = _extractMessage(jsonData, fallback: response.body);
 
       if (response.statusCode == 200) {
-        return TripLogResponse.fromJson(jsonData);
+        if (jsonData is Map<String, dynamic>) {
+          return TripLogResponse.fromJson(jsonData);
+        }
+
+        return TripLogResponse(
+          success: true,
+          message: message.isNotEmpty ? message : 'Trip event logged successfully',
+        );
       }
 
       if (response.statusCode == 409) {
-        final message = (jsonData['message'] ?? '').toString();
-        if (_isIdempotentConflict(message)) {
+        final isLogTripEndpoint = endpoint == ApiConfig.logTripEndpoint;
+        if (isLogTripEndpoint || _isIdempotentConflict(message)) {
           return TripLogResponse(
             success: true,
             message: message.isNotEmpty
@@ -64,7 +72,9 @@ class TripApiService {
       // Return error response instead of throwing
       return TripLogResponse(
         success: false,
-        message: jsonData['message'] ?? 'Trip log request failed (${response.statusCode})',
+        message: message.isNotEmpty
+            ? message
+            : 'Trip log request failed (${response.statusCode})',
       );
     } catch (e) {
       print('❌ [TripAPI] Error: $e');
@@ -81,6 +91,28 @@ class TripApiService {
     return text.contains('already') ||
         text.contains('duplicate') ||
         text.contains('exists') ||
-        text.contains('processed');
+        text.contains('processed') ||
+        text.contains('conflict') ||
+        text.contains('same checkpoint') ||
+        text.contains('already logged');
+  }
+
+  dynamic _decodeBody(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _extractMessage(dynamic jsonData, {String fallback = ''}) {
+    if (jsonData is Map<String, dynamic>) {
+      final message = jsonData['message'] ?? jsonData['error'] ?? jsonData['details'];
+      if (message != null && message.toString().trim().isNotEmpty) {
+        return message.toString().trim();
+      }
+    }
+
+    return fallback.trim();
   }
 }

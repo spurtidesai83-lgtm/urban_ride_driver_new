@@ -22,6 +22,10 @@ class AuthApiService {
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
         final loginResponse = LoginResponse.fromJson(jsonData);
+
+        if (loginResponse.accessToken.trim().isEmpty) {
+          throw Exception('Authentication token missing in login response');
+        }
         
         // Save token to storage
         await StorageService.saveToken(

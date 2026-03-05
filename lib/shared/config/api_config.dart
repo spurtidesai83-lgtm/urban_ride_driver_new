@@ -30,7 +30,7 @@ class ApiConfig {
   // Trip logging endpoints
   static const String startTripEndpoint = '$gatewayPrefix/api/driver/trips/start-trip';
   static const String logTripEndpoint = '$gatewayPrefix/api/driver/trips/log-trip';
-  static const String endTripEndpoint = '$gatewayPrefix/api/driver/trips/end-trip';
+  static const String endTripEndpoint = '$gatewayPrefix/api/driver/trips/end-trips';
   static const String liveTripEndpoint = '$gatewayPrefix/api/driver/trips/live-trip';
   
   // Leave endpoints
@@ -45,7 +45,7 @@ class ApiConfig {
   static const Duration receiveTimeout = Duration(seconds: 30);
   
   // Headers
-  static Map<String, String> getHeaders({String? token}) {
+  static Map<String, String> getHeaders({String? token, String? tokenType}) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -53,7 +53,13 @@ class ApiConfig {
     };
     
     if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
+      final cleanedToken = token
+          .trim()
+          .replaceFirst(RegExp(r'^(Bearer)\s+', caseSensitive: false), '');
+      final authType = (tokenType != null && tokenType.trim().isNotEmpty)
+          ? tokenType.trim()
+          : 'Bearer';
+      headers['Authorization'] = '$authType $cleanedToken';
     }
     
     return headers;

@@ -720,7 +720,11 @@ class PickupNavigationScreen extends ConsumerWidget {
         child: ElevatedButton(
           onPressed: () async {
             final pickupNotifier = ref.read(pickupProvider.notifier);
-            await pickupNotifier.markArrived();
+            final homeState = ref.read(homeProvider);
+            await pickupNotifier.markArrived(
+              latitude: homeState.driverPosition?.latitude,
+              longitude: homeState.driverPosition?.longitude,
+            );
             Navigator.push(
               context,
               MaterialPageRoute(

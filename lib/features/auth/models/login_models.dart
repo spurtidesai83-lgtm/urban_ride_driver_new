@@ -29,17 +29,46 @@ class LoginResponse {
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
-    // Backend uses snake_case: access_token, token_type, expires_in
-    final token = json['access_token'] ?? json['accessToken'] ?? '';
-    final tokenType = json['token_type'] ?? json['tokenType'] ?? 'Bearer';
-    
+    final payload = json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
+
+    // Support both top-level and nested token shapes.
+    final token =
+        payload['access_token'] ??
+        payload['accessToken'] ??
+        payload['token'] ??
+        payload['jwt'] ??
+        json['access_token'] ??
+        json['accessToken'] ??
+        json['token'] ??
+        json['jwt'] ??
+        '';
+
+    final tokenType =
+        payload['token_type'] ??
+        payload['tokenType'] ??
+        json['token_type'] ??
+        json['tokenType'] ??
+        'Bearer';
+
     // expires_in can be int or string from backend
-    final expiresInRaw = json['expires_in'] ?? json['expiresIn'] ?? 0;
+    final expiresInRaw =
+        payload['expires_in'] ??
+        payload['expiresIn'] ??
+        json['expires_in'] ??
+        json['expiresIn'] ??
+        0;
     final expiresIn = expiresInRaw.toString();
     
+    final normalizedToken = token
+        .toString()
+        .trim()
+        .replaceFirst(RegExp(r'^(Bearer)\s+', caseSensitive: false), '');
+
     return LoginResponse(
-      accessToken: token,
-      tokenType: tokenType,
+      accessToken: normalizedToken,
+      tokenType: tokenType.toString(),
       expiresIn: expiresIn,
     );
   }

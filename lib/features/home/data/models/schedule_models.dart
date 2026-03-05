@@ -85,13 +85,15 @@ class StopModel {
     final fromValue = (json['from'] ?? '').toString();
     final toValue = (json['to'] ?? '').toString();
     final toCheckpoint = (json['toCheckpoint'] ?? json['to'] ?? json['name'] ?? '').toString();
+    final fromUqId = (json['fromUqId'] ?? json['from_uq_id'] ?? fromValue).toString();
+    final toUqId = (json['toUqId'] ?? json['to_uq_id'] ?? toValue).toString();
 
     return StopModel(
       name: toCheckpoint,
       fromCheckpoint: fromValue,
       toCheckpoint: toCheckpoint,
-      fromUqId: fromValue,
-      toUqId: toValue,
+      fromUqId: fromUqId,
+      toUqId: toUqId,
       fromLatitude: _parseLatitude(json['fromLatitude']),
       fromLongitude: _parseLongitude(json['fromLongitude']),
       toLatitude: _parseLatitude(json['toLatitude']),
