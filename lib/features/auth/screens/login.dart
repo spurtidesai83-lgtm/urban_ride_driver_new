@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../../home/presentation/screens/driver_main_screen.dart';
@@ -113,17 +112,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
     }
     // Error is handled by ref.listen in build method
-  }
-
-  void _handleBypassLogin() {
-    // Debug-only bypass: Navigate directly to Driver Dashboard
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => const DriverMainScreen(
-          phoneOrEmail: 'debug@test.com',
-        ),
-      ),
-    );
   }
 
   void _handleForgotPassword() {
@@ -371,49 +359,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                   ),
                 ),
-                // Debug-only Bypass Login Button
-                if (kDebugMode) ...[
-                  SizedBox(height: size.height * 0.02),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: OutlinedButton(
-                      onPressed: _handleBypassLogin,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: Colors.redAccent,
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        backgroundColor: Colors.red.withValues(alpha: 0.05),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.bug_report,
-                            color: Colors.redAccent,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Bypass Login (Debug Only)',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  color: Colors.redAccent,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
                 SizedBox(height: size.height * 0.04),
                 // Terms and Conditions
                 Center(

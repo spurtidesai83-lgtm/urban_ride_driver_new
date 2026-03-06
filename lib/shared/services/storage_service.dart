@@ -5,7 +5,10 @@ class StorageService {
   static const String _tokenTypeKey = 'token_type';
   static const String _expiresInKey = 'expires_in';
   static const String _userEmailKey = 'user_email';
-  static const List<String> _preservedPrefixes = ['pickup_progress_'];
+  static const List<String> _preservedPrefixes = [
+    'pickup_progress_',
+    'home_completed_duties_v1_',
+  ];
   
   // Save authentication token
   static Future<void> saveToken(String token, String tokenType, String expiresIn) async {

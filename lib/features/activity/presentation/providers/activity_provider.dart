@@ -173,12 +173,13 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     // 3. Handle live trip logic
     final processedTrips = List<TripModel>.from(allTrips);
     bool liveTripHandled = false;
+    bool liveApiConfirmedNoLiveTrip = false;
 
     // Attempt to merge live trip from dedicated API endpoint first
     if (isClockedIn) {
       try {
         final liveTrip = await _repository.getLiveTrip();
-        if (liveTrip != null && liveTrip.isInProgress) {
+        if (liveTrip != null && liveTrip.isValidLiveTrip) {
           final normalizedDutyNo = liveTrip.dutyNo.trim().toUpperCase();
           final normalizedTripNo = liveTrip.tripNo.toString().trim().toUpperCase();
           
@@ -194,6 +195,9 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
           processedTrips.insert(0, _liveTripToTrip(liveTrip));
           liveTripHandled = true;
           print('📺 [ActivityProvider] Live trip merged from API: ${liveTrip.tripNo}');
+        } else {
+          liveApiConfirmedNoLiveTrip = true;
+          print('📺 [ActivityProvider] Live trip API returned no active trip. Showing no ongoing trip.');
         }
       } catch (e) {
         print('⚠️ [ActivityProvider] Live trip fetch from API failed: $e');
@@ -201,7 +205,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     }
 
     // If not clocked in or API fails, use fallback to mark a duty as live
-    if (isClockedIn && !allDutiesCompleted && !liveTripHandled) {
+    if (isClockedIn && !allDutiesCompleted && !liveTripHandled && !liveApiConfirmedNoLiveTrip) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       

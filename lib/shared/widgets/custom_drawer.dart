@@ -32,11 +32,30 @@ class CustomDrawer extends StatelessWidget {
     this.profileImageUrl,
   });
 
+  String _profileInitials(String? fullName) {
+    final normalized = (fullName ?? '').trim();
+    if (normalized.isEmpty || normalized == '-') return '-';
+
+    final parts = normalized
+        .split(RegExp(r'[\s._-]+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) return '-';
+
+    final first = parts.first.substring(0, 1).toUpperCase();
+    final second = parts.length > 1
+        ? parts.last.substring(0, 1).toUpperCase()
+        : '';
+
+    return second.isEmpty ? first : '$first $second';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Drawer(
       width: ResponsiveUtils.widthPercent(context, 0.75).clamp(280, 320), // 75% of screen width, max 320
-      backgroundColor: const Color(0xFFFFC200),
+      backgroundColor: const Color(0xFFFFEFC2),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
       ),
@@ -55,10 +74,16 @@ class CustomDrawer extends StatelessWidget {
                     height: ResponsiveUtils.height(context, 40),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(ResponsiveUtils.borderRadius(context, 8)),
-                      image: DecorationImage(
-                        image: AssetImage('assets/images/profile_photo.png'),
-                        fit: BoxFit.cover,
-                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(ResponsiveUtils.borderRadius(context, 8)),
+                      child: (profileImageUrl != null && profileImageUrl!.trim().isNotEmpty)
+                          ? Image.network(
+                              profileImageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, error, stackTrace) => _buildInitialsAvatar(),
+                            )
+                          : _buildInitialsAvatar(),
                     ),
                   ),
                   SizedBox(width: ResponsiveUtils.padding(context, 12)),
@@ -72,7 +97,7 @@ class CustomDrawer extends StatelessWidget {
                           style: TextStyle(
                             fontSize: ResponsiveUtils.fontSize(context, 16),
                             fontWeight: FontWeight.w500,
-                            color: Colors.black,
+                            color: const Color(0xFF1F2937),
                           ),
                         ),
                         SizedBox(height: ResponsiveUtils.padding(context, 2)),
@@ -81,7 +106,7 @@ class CustomDrawer extends StatelessWidget {
                           style: TextStyle(
                             fontSize: ResponsiveUtils.fontSize(context, 12),
                             fontWeight: FontWeight.w400,
-                            color: Colors.black,
+                            color: const Color(0xFF4B5563),
                           ),
                         ),
                       ],
@@ -90,7 +115,7 @@ class CustomDrawer extends StatelessWidget {
                   // Close Icon
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: Icon(Icons.close, size: ResponsiveUtils.iconSize(context, 24), color: Colors.black),
+                    child: Icon(Icons.close, size: ResponsiveUtils.iconSize(context, 24), color: const Color(0xFF1F2937)),
                   ),
                 ],
               ),
@@ -112,6 +137,31 @@ class CustomDrawer extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInitialsAvatar() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFF4CC),
+            Color(0xFFFFC200),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          _profileInitials(userName),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1F2937),
+          ),
         ),
       ),
     );
@@ -139,14 +189,14 @@ class DrawerItem extends StatelessWidget {
       leading: Icon(
         icon,
         size: ResponsiveUtils.iconSize(context, 20),
-        color: Colors.black,
+        color: const Color(0xFF1F2937),
       ),
       title: Text(
         label,
         style: TextStyle(
           fontSize: ResponsiveUtils.fontSize(context, 16),
           fontWeight: FontWeight.w500,
-          color: Colors.black,
+          color: const Color(0xFF1F2937),
         ),
       ),
       onTap: onTap ?? () {

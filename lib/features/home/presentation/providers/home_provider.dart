@@ -6,6 +6,7 @@ import '../../data/models/duty_model.dart';
 import '../../data/models/driving_data_model.dart';
 import '../../data/models/clock_models.dart';
 import '../../data/repositories/home_repository.dart';
+import '../../../../shared/services/storage_service.dart';
 import '../../../profile/data/models/profile_model.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 
@@ -139,6 +140,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
   final HomeRepository _repository;
   final Ref _ref;
   static const String _lastClockRouteKey = 'home_last_clock_route';
+  static const String _completedDutiesPrefix = 'home_completed_duties_v1_';
+  Set<String> _completedDutyKeys = <String>{};
+  bool _completedDutyKeysLoaded = false;
 
   HomeNotifier(this._repository, this._ref) : super(HomeState(
     currentDateIndex: 0,
@@ -177,6 +181,57 @@ class HomeNotifier extends StateNotifier<HomeState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_lastClockRouteKey, route);
     } catch (_) {}
+  }
+
+  Future<String> _completedDutyStorageKey() async {
+    final userEmail = (await StorageService.getUserEmail())?.trim().toLowerCase();
+    final userPart = (userEmail != null && userEmail.isNotEmpty) ? userEmail : 'default';
+    return '$_completedDutiesPrefix$userPart';
+  }
+
+  String _buildDutyCompletionKey(DutyModel duty) {
+    final dateStr = '${duty.date.year.toString().padLeft(4, '0')}-'
+        '${duty.date.month.toString().padLeft(2, '0')}-'
+        '${duty.date.day.toString().padLeft(2, '0')}';
+    final tripPart = duty.tripNo?.toString() ?? '${duty.joiningTime}_${duty.closeTime}';
+    return '${duty.dutyNo}_${tripPart}_$dateStr';
+  }
+
+  Future<void> _loadCompletedDutyKeys() async {
+    if (_completedDutyKeysLoaded) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = await _completedDutyStorageKey();
+      final stored = prefs.getStringList(key) ?? const <String>[];
+      _completedDutyKeys = stored
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet();
+    } catch (e) {
+      print('⚠️ [HomeProvider] Failed to load completed duties: $e');
+      _completedDutyKeys = <String>{};
+    } finally {
+      _completedDutyKeysLoaded = true;
+    }
+  }
+
+  Future<void> _saveCompletedDutyKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = await _completedDutyStorageKey();
+      await prefs.setStringList(key, _completedDutyKeys.toList());
+    } catch (e) {
+      print('⚠️ [HomeProvider] Failed to save completed duties: $e');
+    }
+  }
+
+  List<DutyModel> _filterCompletedDuties(List<DutyModel> duties) {
+    if (_completedDutyKeys.isEmpty) return duties;
+
+    return duties
+        .where((duty) => !_completedDutyKeys.contains(_buildDutyCompletionKey(duty)))
+        .toList();
   }
 
   String? _bestRouteIdentifierFromDuty(DutyModel? duty) {
@@ -380,6 +435,8 @@ class HomeNotifier extends StateNotifier<HomeState> {
   Future<void> fetchDashboard() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
+    await _loadCompletedDutyKeys();
+
     bool isClockedIn = state.isClockedIn;
     int totalTrips = 0;
     String totalSteeringTime = '--';
@@ -422,11 +479,18 @@ class HomeNotifier extends StateNotifier<HomeState> {
       var allDutiesCombined = _mergeAndDeduplicateDuties(finalDuties, weeklyDuties);
       allDutiesCombined = _mergeAndDeduplicateDuties(allDutiesCombined, tomorrowDuties);
 
-      final hasFreshScheduleData = finalDuties.isNotEmpty || allDutiesCombined.isNotEmpty;
+      final filteredTodayDuties = _filterCompletedDuties(finalDuties);
+      final filteredAllDutiesCombined = _filterCompletedDuties(allDutiesCombined);
+
+      final hasFreshScheduleData = filteredTodayDuties.isNotEmpty || filteredAllDutiesCombined.isNotEmpty;
       final shouldKeepExistingSchedules = !hasFreshScheduleData && state.allDuties.isNotEmpty;
 
-      final dutiesToApply = shouldKeepExistingSchedules ? state.duties : finalDuties;
-      final allDutiesToApply = shouldKeepExistingSchedules ? state.allDuties : allDutiesCombined;
+      final dutiesToApply = _filterCompletedDuties(
+        shouldKeepExistingSchedules ? state.duties : filteredTodayDuties,
+      );
+      final allDutiesToApply = _filterCompletedDuties(
+        shouldKeepExistingSchedules ? state.allDuties : filteredAllDutiesCombined,
+      );
 
         final preservedDutyIndex = dutiesToApply.isEmpty
           ? 0
@@ -459,7 +523,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
         _persistLastClockRoute(routeToPersist);
       }
 
-      print('🏠 [HomeProvider] Dashboard loaded. Today\'s duties: ${finalDuties.length}, Total unique duties: ${allDutiesCombined.length}');
+      print('🏠 [HomeProvider] Dashboard loaded. Today\'s duties: ${dutiesToApply.length}, Total unique duties: ${allDutiesToApply.length}');
 
     } catch (e) {
       print('❌ Critical Dashboard fetch failed: $e');
@@ -655,9 +719,10 @@ class HomeNotifier extends StateNotifier<HomeState> {
           state = state.copyWith(
             isClockedIn: true,
             clockInManuallySet: false, // Reset flag since it's from API
-            isClockActionLoading: false,
             lastClockRouteIdentifier: usedRouteIdentifier,
           );
+          await fetchDashboard();
+          state = state.copyWith(isClockActionLoading: false);
           return const ClockActionResult(
             success: true,
             message: 'Clocked in successfully',
@@ -682,8 +747,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
           state = state.copyWith(
             isClockedIn: true,
             clockInManuallySet: true, // Prevent dashboard from overriding
-            isClockActionLoading: false,
           );
+          await fetchDashboard();
+          state = state.copyWith(isClockActionLoading: false);
           return const ClockActionResult(
             success: true,
             message: 'You are already clocked in for today',
@@ -745,8 +811,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
             isClockedIn: false,
             lockedOutDate: DateTime.now(),
             clockInManuallySet: false,
-            isClockActionLoading: false,
           );
+          await fetchDashboard();
+          state = state.copyWith(isClockActionLoading: false);
           return const ClockActionResult(
             success: true,
             message: 'Clocked out successfully',
@@ -768,9 +835,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
           state = state.copyWith(
             isClockedIn: false,
             clockInManuallySet: true,
-            isClockActionLoading: false,
           );
-          fetchDashboard();
+          await fetchDashboard();
+          state = state.copyWith(isClockActionLoading: false);
           return const ClockActionResult(
             success: true,
             message: 'Already clocked out',
@@ -827,8 +894,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
         state = state.copyWith(
           isClockedIn: false,
           clockInManuallySet: false,
-          isClockActionLoading: false,
         );
+        await fetchDashboard();
+        state = state.copyWith(isClockActionLoading: false);
         return const ClockActionResult(
           success: true,
           message: 'Clocked out successfully',
@@ -850,9 +918,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
         state = state.copyWith(
           isClockedIn: false,
           clockInManuallySet: true,
-          isClockActionLoading: false,
         );
-        fetchDashboard();
+        await fetchDashboard();
+        state = state.copyWith(isClockActionLoading: false);
         return const ClockActionResult(
           success: true,
           message: 'Already clocked out',
@@ -874,7 +942,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
     }
   }
 
-  void completeCurrentDuty() {
+  Future<void> completeCurrentDuty() async {
+    await _loadCompletedDutyKeys();
+
     if (state.duties.isEmpty) {
       state = state.copyWith(allDutiesCompleted: true, currentDutyIndex: 0);
       return;
@@ -882,11 +952,19 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
     final activeDuties = List<DutyModel>.from(state.duties);
     final removeIndex = state.currentDutyIndex.clamp(0, activeDuties.length - 1);
+    final completedDuty = activeDuties[removeIndex];
+    final completedKey = _buildDutyCompletionKey(completedDuty);
+    _completedDutyKeys = {..._completedDutyKeys, completedKey};
+    await _saveCompletedDutyKeys();
+
     activeDuties.removeAt(removeIndex);
+    final allDuties = List<DutyModel>.from(state.allDuties)
+      ..removeWhere((duty) => _buildDutyCompletionKey(duty) == completedKey);
 
     if (activeDuties.isEmpty) {
       state = state.copyWith(
         duties: activeDuties,
+        allDuties: allDuties,
         currentDutyIndex: 0,
         allDutiesCompleted: true,
       );
@@ -896,6 +974,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
     final nextIndex = removeIndex.clamp(0, activeDuties.length - 1);
     state = state.copyWith(
       duties: activeDuties,
+      allDuties: allDuties,
       currentDutyIndex: nextIndex,
       allDutiesCompleted: false,
     );

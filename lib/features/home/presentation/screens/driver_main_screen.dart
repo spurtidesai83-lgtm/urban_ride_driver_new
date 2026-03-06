@@ -150,6 +150,10 @@ class _DriverMainScreenState extends ConsumerState<DriverMainScreen> {
             data: (profile) => profile?.phone,
             orElse: () => null,
           ),
+          profileImageUrl: profileAsync.maybeWhen(
+            data: (profile) => profile?.profileImageUrl,
+            orElse: () => null,
+          ),
         ),
         onDrawerChanged: (isOpened) {
           setState(() {

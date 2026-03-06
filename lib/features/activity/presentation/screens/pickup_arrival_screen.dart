@@ -24,7 +24,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
     final homeNotifier = ref.read(homeProvider.notifier);
 
     await pickupNotifier.endTrip();
-    homeNotifier.completeCurrentDuty();
+    await homeNotifier.completeCurrentDuty();
 
     final homeState = ref.read(homeProvider);
     pickupNotifier.loadStopsFromDuty(homeState.currentDuty);
@@ -1045,7 +1045,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
               
               // End duty - complete current duty and go to home
               final homeNotifier = ref.read(homeProvider.notifier);
-              homeNotifier.completeCurrentDuty();
+              await homeNotifier.completeCurrentDuty();
               
               // Load next duty's stops
               final homeState = ref.read(homeProvider);

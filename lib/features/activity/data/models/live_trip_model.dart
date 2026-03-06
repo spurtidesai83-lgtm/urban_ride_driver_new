@@ -29,6 +29,15 @@ class LiveTripModel {
 
   bool get isInProgress => status.toUpperCase() == 'IN_PROGRESS';
 
+  bool get hasCoreValues {
+    return tripNo > 0 &&
+        dutyNo.trim().isNotEmpty &&
+        fromLocation.trim().isNotEmpty &&
+        toLocation.trim().isNotEmpty;
+  }
+
+  bool get isValidLiveTrip => isInProgress && hasCoreValues;
+
   factory LiveTripModel.fromJson(Map<String, dynamic> json) {
     DateTime? parsedDate;
     final tripDateRaw = json['tripDate'];

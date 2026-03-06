@@ -1003,9 +1003,6 @@ class HomeScreen extends ConsumerWidget {
                 backgroundColor: result.success ? Colors.green : Colors.red,
               ),
             );
-            if (result.success) {
-              homeNotifier.fetchDashboard();
-            }
           }
         } else {
           final result = await homeNotifier.toggleClockStatus();
@@ -1017,9 +1014,6 @@ class HomeScreen extends ConsumerWidget {
               backgroundColor: result.success ? Colors.green : Colors.red,
             ),
           );
-          if (result.success) {
-            homeNotifier.fetchDashboard();
-          }
         }
       },
       child: AnimatedContainer(
@@ -1052,7 +1046,11 @@ class HomeScreen extends ConsumerWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                homeState.isClockedIn ? Icons.logout : Icons.login,
+                homeState.isClockActionLoading
+                    ? Icons.hourglass_top
+                    : homeState.isClockedIn
+                        ? Icons.logout
+                        : Icons.login,
                 color: Colors.black,
                 size: 28,
               ),
@@ -1063,7 +1061,11 @@ class HomeScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    homeState.isClockedIn ? 'YOU ARE ONLINE' : 'YOU ARE OFFLINE',
+                    homeState.isClockActionLoading
+                        ? 'UPDATING SHIFT STATUS'
+                        : homeState.isClockedIn
+                            ? 'YOU ARE ONLINE'
+                            : 'YOU ARE OFFLINE',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -1072,22 +1074,46 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    homeState.isClockedIn ? 'Tap to Clock Out' : 'Tap to Start Shift',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                  if (homeState.isClockActionLoading)
+                    Row(
+                      children: const [
+                        SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.black,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Please wait...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      homeState.isClockedIn ? 'Tap to Clock Out' : 'Tap to Start Shift',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: homeState.isClockedIn ? Colors.black54 : Colors.grey[400],
-              size: 24,
-            ),
+            if (!homeState.isClockActionLoading)
+              Icon(
+                Icons.chevron_right_rounded,
+                color: homeState.isClockedIn ? Colors.black54 : Colors.grey[400],
+                size: 24,
+              ),
           ],
         ),
       ),
