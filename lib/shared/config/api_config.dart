@@ -1,6 +1,6 @@
 class ApiConfig {
   // Base URL
-  static const String baseUrl = 'https://truing-multidentate-julio.ngrok-free.dev'; // TODO: Update with actual base URL
+  static const String baseUrl = 'https://api.urbanride.ltd'; // TODO: Update with actual base URL
   
   // Gateway prefix
   static const String gatewayPrefix = '/workshop';
@@ -9,6 +9,7 @@ class ApiConfig {
   static const String loginEndpoint = '$gatewayPrefix/driver/auth/login';
   static const String resetPasswordEndpoint = '$gatewayPrefix/driver/auth/reset-password';
   static const String validateTokenEndpoint = '$gatewayPrefix/driver/auth/validate-token';
+  
   
   // Driver endpoints
   static const String dashboardEndpoint = '$gatewayPrefix/api/driver/dashboard';
