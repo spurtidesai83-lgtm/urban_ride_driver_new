@@ -393,7 +393,7 @@ class WalletScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-              )).toList(),
+              )),
             ],
           ),
           ),

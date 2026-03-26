@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
 import '../../../shared/widgets/custom_app_bar.dart';
-import '../../../shared/widgets/error_state_widget.dart';
 import '../providers/notification_provider.dart';
 import '../models/notification_models.dart';
 

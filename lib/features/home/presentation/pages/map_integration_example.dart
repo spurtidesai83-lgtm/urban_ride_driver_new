@@ -5,7 +5,7 @@ import '../widgets/map_view.dart';
 
 /// Example of how to integrate MapView into your home screen
 class MapIntegrationExample extends ConsumerWidget {
-  const MapIntegrationExample({Key? key}) : super(key: key);
+  const MapIntegrationExample({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

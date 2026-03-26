@@ -240,6 +240,8 @@ class PickupNavigationScreen extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    final passengerCountDisplay = '${currentStop.passengerCount} Passengers';
+
     return Container(
       padding: ResponsiveUtils.symmetricPadding(context, horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
@@ -278,7 +280,7 @@ class PickupNavigationScreen extends ConsumerWidget {
           SizedBox(height: ResponsiveUtils.padding(context, 12)),
           _buildPickupDetailRow(context, Icons.location_on, currentStop.location),
           SizedBox(height: ResponsiveUtils.padding(context, 8)),
-          _buildPickupDetailRow(context, Icons.person, currentStop.passengers),
+          _buildPickupDetailRow(context, Icons.person, passengerCountDisplay),
           SizedBox(height: ResponsiveUtils.padding(context, 8)),
           _buildPickupDetailRow(context, Icons.access_time, currentStop.timeWindow),
           SizedBox(height: ResponsiveUtils.padding(context, 8)),
@@ -542,7 +544,7 @@ class PickupNavigationScreen extends ConsumerWidget {
                     context,
                     nextStops[index].stopNumber,
                     nextStops[index].location,
-                    nextStops[index].passengers,
+                    '${nextStops[index].passengerCount} Passengers',
                   ),
                 ],
               ),

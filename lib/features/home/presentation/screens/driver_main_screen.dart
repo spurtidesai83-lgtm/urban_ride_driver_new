@@ -143,15 +143,15 @@ class _DriverMainScreenState extends ConsumerState<DriverMainScreen> {
         extendBody: true,
         drawer: CustomDrawer(
           userName: profileAsync.maybeWhen(
-            data: (profile) => profile?.name,
+            data: (profile) => profile.name,
             orElse: () => null,
           ),
           phoneNumber: profileAsync.maybeWhen(
-            data: (profile) => profile?.phone,
+            data: (profile) => profile.phone,
             orElse: () => null,
           ),
           profileImageUrl: profileAsync.maybeWhen(
-            data: (profile) => profile?.profileImageUrl,
+            data: (profile) => profile.profileImageUrl,
             orElse: () => null,
           ),
         ),

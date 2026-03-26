@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../../auth/models/login_models.dart';
 import '../models/notification_models.dart';
 import '../../../shared/services/storage_service.dart';
 import '../../../shared/config/api_config.dart';

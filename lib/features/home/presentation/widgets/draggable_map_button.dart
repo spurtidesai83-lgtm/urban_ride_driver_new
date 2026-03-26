@@ -4,9 +4,9 @@ class DraggableMapButton extends StatefulWidget {
   final VoidCallback onTap;
 
   const DraggableMapButton({
-    Key? key,
+    super.key,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   State<DraggableMapButton> createState() => _DraggableMapButtonState();

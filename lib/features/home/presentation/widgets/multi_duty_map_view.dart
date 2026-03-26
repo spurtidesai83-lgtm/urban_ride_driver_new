@@ -11,12 +11,12 @@ class MultiDutyMapView extends StatefulWidget {
   final Function(DutyModel)? onDutyTapped;
 
   const MultiDutyMapView({
-    Key? key,
+    super.key,
     required this.duties,
     this.driverPosition,
     this.onMapReady,
     this.onDutyTapped,
-  }) : super(key: key);
+  });
 
   @override
   State<MultiDutyMapView> createState() => _MultiDutyMapViewState();

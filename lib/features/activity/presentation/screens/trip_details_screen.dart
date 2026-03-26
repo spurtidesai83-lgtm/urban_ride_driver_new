@@ -96,7 +96,7 @@ class TripDetailsScreen extends ConsumerWidget {
                     // Stops/Depot Information
                     Padding(
                       padding: ResponsiveUtils.symmetricPadding(context, horizontal: 20),
-                      child: _buildStopsSection(context),
+                      child: _buildStopsSection(context, ref),
                     ),
                     
                     SizedBox(height: ResponsiveUtils.padding(context, 100)),
@@ -494,8 +494,21 @@ class TripDetailsScreen extends ConsumerWidget {
     );
   }
 
-  List<Map<String, dynamic>> _getStopsForRoute() {
-    // If stops data is provided from API/backend, use it
+  List<Map<String, dynamic>> _getStopsForRoute(PickupState? pickupState) {
+    // If we have data in the pickup provider (passenger counts etc.), use it
+    if (pickupState != null && pickupState.stops.isNotEmpty) {
+      print('🟢 [TripDetailsScreen] Using ${pickupState.stops.length} stops from PickupProvider');
+      return pickupState.stops.map((stop) => {
+        'name': stop.location,
+        'time': stop.scheduledTime,
+        'description': '${stop.passengerCount} Passengers',
+        'icon': Icons.location_on,
+        'iconColor': const Color(0xFFFFC200),
+        'isCompleted': stop.isPickedUp,
+      }).toList();
+    }
+    
+    // Fallback to duty stops if provider not loaded
     if (stops != null && stops!.isNotEmpty) {
       print('🟢 [TripDetailsScreen] Using ${stops!.length} stops from API');
       return stops!.map((stop) => {
@@ -509,41 +522,20 @@ class TripDetailsScreen extends ConsumerWidget {
     }
     
     // No hardcoded data - API data is required
-    throw Exception('Trip stops data not available from server');
+    return [];
   }
 
-  Widget _buildStopsSection(BuildContext context) {
-    // Stops must come from API - if not available, show error
-    try {
-      final stops = _getStopsForRoute();
-      return Column(
-        children: stops.asMap().entries.map((entry) {
-          final index = entry.key;
-          final stop = entry.value;
-          final isLast = index == stops.length - 1;
-          final isCompleted = stop['isCompleted'] as bool? ?? false;
-          
-          return _buildStopItem(
-            context,
-            stop['name'] as String,
-            stop['time'] as String,
-            stop['description'] as String,
-            stop['icon'] as IconData,
-            stop['iconColor'] as Color,
-            isLast,
-            stop['hasLink'] as bool? ?? false,
-            isCompleted,
-          );
-        }).toList(),
-      );
-    } catch (e) {
-      // Show error message if stops not available
+  Widget _buildStopsSection(BuildContext context, WidgetRef ref) {
+    final pickupState = ref.watch(pickupProvider);
+    final stopsList = _getStopsForRoute(pickupState);
+    
+    if (stopsList.isEmpty) {
       return Center(
         child: Padding(
           padding: ResponsiveUtils.symmetricPadding(context, vertical: 40),
           child: Column(
             children: [
-              Icon(Icons.error_outline, color: Colors.red, size: 40),
+              const Icon(Icons.error_outline, color: Colors.red, size: 40),
               SizedBox(height: ResponsiveUtils.padding(context, 12)),
               Text(
                 'Trip stops not available',
@@ -558,6 +550,27 @@ class TripDetailsScreen extends ConsumerWidget {
         ),
       );
     }
+
+    return Column(
+      children: stopsList.asMap().entries.map((entry) {
+        final index = entry.key;
+        final stop = entry.value;
+        final isLast = index == stopsList.length - 1;
+        final isCompleted = stop['isCompleted'] as bool? ?? false;
+        
+        return _buildStopItem(
+          context,
+          stop['name'] as String,
+          stop['time'] as String,
+          stop['description'] as String,
+          stop['icon'] as IconData,
+          stop['iconColor'] as Color,
+          isLast,
+          stop['hasLink'] as bool? ?? false,
+          isCompleted,
+        );
+      }).toList(),
+    );
   }
 
   Widget _buildStopItem(

@@ -412,8 +412,7 @@ class _TripCard extends ConsumerWidget {
   const _TripCard({
     required this.trip,
     required this.isClockedIn,
-    Key? key,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -427,7 +426,7 @@ class _TripCard extends ConsumerWidget {
     final duty = dutyList.isNotEmpty ? dutyList.first : null;
     final stops = duty?.stops;
 
-    void _navigateToDetails() {
+    void navigateToDetails() {
       if (trip.buttonText == 'View Details') {
         Navigator.push(
           context,
@@ -473,7 +472,7 @@ class _TripCard extends ConsumerWidget {
     final actionColor = isLive ? const Color(0xFF27AE60) : Colors.black;
 
     return GestureDetector(
-      onTap: _navigateToDetails,
+      onTap: navigateToDetails,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
@@ -488,9 +487,9 @@ class _TripCard extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  trip.timeDisplay, 
+                  trip.timeDisplay,
                   style: TextStyle(
-                    fontSize: ResponsiveUtils.fontSize(context, 15), 
+                    fontSize: ResponsiveUtils.fontSize(context, 15),
                     fontWeight: FontWeight.bold,
                     color: Colors.black
                   )
@@ -512,22 +511,22 @@ class _TripCard extends ConsumerWidget {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 12),
 
             // Route Visualization
             _buildRouteRow(
-              context, 
-              Icons.circle, 
-              Colors.green, 
-              trip.from, 
+              context,
+              Icons.circle,
+              Colors.green,
+              trip.from,
               isFirst: true
             ),
             _buildRouteRow(
-              context, 
-              Icons.square, 
-              Colors.red, 
-              trip.to, 
+              context,
+              Icons.square,
+              Colors.red,
+              trip.to,
               isLast: true
             ),
 

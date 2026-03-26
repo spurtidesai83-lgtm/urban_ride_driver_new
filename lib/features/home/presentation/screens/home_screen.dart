@@ -14,6 +14,7 @@ import 'package:urbandriver/features/profile/data/models/vehicle_model.dart';
 import '../../../activity/presentation/screens/trip_details_screen.dart';
 import '../../../activity/presentation/screens/trip_map_screen.dart';
 import '../../../profile/presentation/screens/vehicle_details_screen.dart';
+import 'package:loading_indicator/loading_indicator.dart';
 
 class HomeScreen extends ConsumerWidget {
   final String phoneOrEmail;
@@ -128,35 +129,23 @@ class HomeScreen extends ConsumerWidget {
                   _buildShiftControlCard(context, homeState, homeNotifier),
                   SizedBox(height: ResponsiveUtils.padding(context, 20)),
 
-                  // No Duty Card - Show when backend has no duties for today
-                  if (homeState.duties.isEmpty)
-                    _buildNoDutyAllottedCard(context),
-                  if (homeState.duties.isEmpty)
-                    SizedBox(height: ResponsiveUtils.padding(context, 20)),
-
-                  // Duty Allocation Card - Show when duties are not completed
-                  if (!homeState.allDutiesCompleted && homeState.duties.isNotEmpty)
-                    _buildDutyAllocationCard(context, homeState),
-                  if (!homeState.allDutiesCompleted && homeState.duties.isNotEmpty)
-                    SizedBox(height: ResponsiveUtils.padding(context, 20)),
-
-                  // Next Duty Card - Show when there's a next duty
-                  if (homeState.nextDuty != null && !homeState.allDutiesCompleted)
-                    _buildNextDutyCard(context, homeState),
-                  if (homeState.nextDuty != null && !homeState.allDutiesCompleted)
-                    SizedBox(height: ResponsiveUtils.padding(context, 20)),
-
-                  // Duty Completed for the Day Card (only when all duties done and clocked in)
-                  if (homeState.allDutiesCompleted && homeState.isClockedIn && homeState.duties.isNotEmpty)
-                    _buildDutyCompletedCard(context),
-                  if (homeState.allDutiesCompleted && homeState.isClockedIn && homeState.duties.isNotEmpty)
-                    SizedBox(height: ResponsiveUtils.padding(context, 20)),
-
-                  // Tomorrow's Schedule Card (only when all duties done and clocked out)
-                  if (homeState.allDutiesCompleted && !homeState.isClockedIn && homeState.duties.isNotEmpty)
-                    _buildTomorrowScheduleCard(context, homeState),
-                  if (homeState.allDutiesCompleted && !homeState.isClockedIn && homeState.duties.isNotEmpty)
-                    SizedBox(height: ResponsiveUtils.padding(context, 20)),
+                  // Duty Section (Current, Next, Completed or Tomorrow)
+                  if (homeState.isLoading || homeState.duties.isNotEmpty) ...[
+                    if (homeState.isLoading || !homeState.allDutiesCompleted) ...[
+                      _buildDutyAllocationCard(context, homeState),
+                      SizedBox(height: ResponsiveUtils.padding(context, 20)),
+                      if (homeState.nextDuty != null) ...[
+                        _buildNextDutyCard(context, homeState),
+                        SizedBox(height: ResponsiveUtils.padding(context, 20)),
+                      ],
+                    ] else ...[
+                      if (homeState.isClockedIn)
+                        _buildDutyCompletedCard(context)
+                      else
+                        _buildTomorrowScheduleCard(context, homeState),
+                      SizedBox(height: ResponsiveUtils.padding(context, 20)),
+                    ],
+                  ],
 
                   // Activity Section
                   Text(
@@ -550,13 +539,49 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       child: const Center(
-        child: CircularProgressIndicator(),
+        child: SizedBox(
+          width: 50,
+          height: 30,
+          child: LoadingIndicator(
+            indicatorType: Indicator.ballPulse,
+            colors: [Color(0xFFFFC200)],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildDutyAllocationCard(BuildContext context, HomeState state) {
     final currentDuty = state.currentDuty;
+    
+    // Use overall loading state for duty allocation loader
+    if (state.isLoading) {
+      return Container(
+        height: 180,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 80,
+            height: 80,
+            child: LoadingIndicator(
+              indicatorType: Indicator.ballGridBeat,
+              colors: [Color(0xFFFFC200), Colors.white70, Color(0xFFFFC200), Colors.white70, Color(0xFFFFC200), Colors.white70],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (currentDuty == null) {
       return const SizedBox.shrink();
     }
@@ -828,6 +853,7 @@ class HomeScreen extends ConsumerWidget {
               borderColor: const Color(0xFFBBDEFB),
               iconColor: const Color(0xFF1565C0),
               icon: Icons.directions_bus,
+              isLoading: homeState.isLoading,
             ),
           ),
           const SizedBox(width: 12),
@@ -840,6 +866,7 @@ class HomeScreen extends ConsumerWidget {
               borderColor: const Color(0xFFFFE082),
               iconColor: const Color(0xFFEF6C00),
               icon: Icons.timer,
+              isLoading: homeState.isLoading,
             ),
           ),
           const SizedBox(width: 12),
@@ -852,6 +879,7 @@ class HomeScreen extends ConsumerWidget {
               borderColor: const Color(0xFFFFCDD2),
               iconColor: const Color(0xFFC62828),
               icon: Icons.more_time,
+              isLoading: homeState.isLoading,
             ),
           ),
           const SizedBox(width: 12),
@@ -864,6 +892,7 @@ class HomeScreen extends ConsumerWidget {
               borderColor: const Color(0xFFC8E6C9),
               iconColor: const Color(0xFF2E7D32),
               icon: Icons.speed,
+              isLoading: homeState.isLoading,
             ),
           ),
         ],
@@ -878,6 +907,7 @@ class HomeScreen extends ConsumerWidget {
     required Color borderColor,
     required Color iconColor,
     IconData? icon,
+    bool isLoading = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -921,14 +951,24 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            time,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: iconColor, // Using icon color for text to match theme
+          if (isLoading)
+            SizedBox(
+              height: 30,
+              width: 30,
+              child: LoadingIndicator(
+                indicatorType: Indicator.ballPulse,
+                colors: [iconColor, borderColor],
+              ),
+            )
+          else
+            Text(
+              time,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: iconColor, // Using icon color for text to match theme
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1078,11 +1118,11 @@ class HomeScreen extends ConsumerWidget {
                     Row(
                       children: const [
                         SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
+                          height: 25,
+                          width: 50,
+                          child: LoadingIndicator(
+                            indicatorType: Indicator.ballPulse,
+                            colors: [Colors.black],
                           ),
                         ),
                         SizedBox(width: 10),

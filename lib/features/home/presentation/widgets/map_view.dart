@@ -14,7 +14,7 @@ class MapView extends StatefulWidget {
   final VoidCallback? onMapReady;
 
   const MapView({
-    Key? key,
+    super.key,
     this.currentDuty,
     this.driverPosition,
     this.tripStarted = false,
@@ -22,7 +22,7 @@ class MapView extends StatefulWidget {
     this.routeStops = const [],
     this.routeStopLabels = const [],
     this.onMapReady,
-  }) : super(key: key);
+  });
 
   @override
   State<MapView> createState() => _MapViewState();

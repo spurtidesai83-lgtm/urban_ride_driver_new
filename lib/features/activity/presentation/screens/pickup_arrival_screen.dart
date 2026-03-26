@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:urbandriver/shared/utils/responsive_utils.dart';
 import '../providers/pickup_provider.dart';
 import 'package:urbandriver/features/home/presentation/providers/home_provider.dart';
@@ -407,6 +408,8 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
 
     if (currentStop == null) return const SizedBox.shrink();
 
+    final passengerCountDisplay = '${currentStop.passengerCount} Passengers';
+
     return Container(
       padding: ResponsiveUtils.symmetricPadding(context, horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
@@ -445,7 +448,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
           SizedBox(height: ResponsiveUtils.padding(context, 12)),
           _buildPickupDetailRow(context, Icons.location_on, currentStop.location),
           SizedBox(height: ResponsiveUtils.padding(context, 8)),
-          _buildPickupDetailRow(context, Icons.person, currentStop.passengers),
+          _buildPickupDetailRow(context, Icons.person, passengerCountDisplay),
           SizedBox(height: ResponsiveUtils.padding(context, 8)),
           _buildPickupDetailRow(context, Icons.access_time, currentStop.timeWindow),
           SizedBox(height: ResponsiveUtils.padding(context, 8)),
@@ -643,23 +646,16 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
     return Container(
       width: 345,
       constraints: const BoxConstraints(minHeight: 120),
-      // The parent padding handles the visual "left: 24px" and "top" positioning in the flow,
-      // but to be precise with "left: 24px" we might need to adjust the parent or margin here if the parent is different.
-      // The parent has symmetric padding 20. If we want 24, we can add margin or change parent.
-      // However, fixing width to 345 might cause overflow if the screen is small. 
-      // I'll stick to the requested size but use responsive alignment if needed.
-      // Since it's a card in a list, "top" is relative. 
-      margin: const EdgeInsets.only(left: 4), // Adding 4 to the existing 20 to make it 24 roughly? 
-      // Actually typically I should just set the container style.
+      margin: const EdgeInsets.only(left: 4),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB), // Light greyish blue often used as card bg or Colors.grey[50]
+        color: const Color(0xFFF8F9FB),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Next Pickups',
             style: TextStyle(
               fontSize: 14,
@@ -681,7 +677,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
             ...nextStops.asMap().entries.map((entry) {
               final index = entry.key;
               final stop = entry.value;
-              final details = '${stop.passengers} • ETA ${stop.scheduledTime}';
+              final details = '${stop.passengerCount} Passengers • ETA ${stop.scheduledTime}';
 
               return Padding(
                 padding: EdgeInsets.only(
@@ -721,7 +717,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
             ),
           ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -729,16 +725,16 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
               Text(
                 location,
                 style: const TextStyle(
-                  fontSize: 13, // Slightly smaller to fit
+                  fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: Colors.black,
                 ),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
               Text(
                 details,
-                style: TextStyle(
-                  fontSize: 11, // Small detail text
+                style: const TextStyle(
+                  fontSize: 11,
                   color: Colors.black,
                   fontWeight: FontWeight.w500,
                 ),
@@ -751,6 +747,14 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
   }
 
   Widget _buildArrivalActionCard(BuildContext context) {
+    final pickupState = ref.watch(pickupProvider);
+    final currentStop = pickupState.currentStop;
+    
+    final passenger = currentStop?.bookingData?.passengerDetails.isNotEmpty == true 
+        ? currentStop!.bookingData!.passengerDetails.first 
+        : null;
+    final passengerName = passenger?.name ?? 'Passenger';
+
     return Container(
       width: 345,
       margin: const EdgeInsets.only(left: 4),
@@ -765,15 +769,15 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
           // Arrival Status
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline,
                 size: 20,
-                color: const Color(0xFFFFC200),
+                color: Color(0xFFFFC200),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'You have arrived to pickup Vatsal',
+                  'You have arrived to pickup $passengerName',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -783,43 +787,50 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           
           // Action Buttons
           Row(
             children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      // TODO: Make phone call
-                    },
-                    icon: Icon(
-                      Icons.phone_outlined,
-                      size: 16,
-                      color: Colors.black87,
-                    ),
-                    label: Text(
-                      'Call',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+              if (passenger != null)
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final phone = passenger.phoneNumber;
+                        if (phone.isNotEmpty) {
+                          final Uri phoneUri = Uri(scheme: 'tel', path: phone);
+                          if (await canLaunchUrl(phoneUri)) {
+                            await launchUrl(phoneUri);
+                          }
+                        }
+                      },
+                      icon: const Icon(
+                        Icons.phone_outlined,
+                        size: 16,
                         color: Colors.black87,
                       ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      side: BorderSide(color: Colors.grey[400]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                      label: const Text(
+                        'Call',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                        ),
                       ),
-                      backgroundColor: Colors.white,
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        side: BorderSide(color: Colors.grey[400]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        backgroundColor: Colors.white,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              SizedBox(width: 12),
+              if (passenger != null) const SizedBox(width: 12),
               Expanded(
                 child: SizedBox(
                   height: 40,
@@ -871,7 +882,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
             ],
           ),
           
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           
           // Passenger Not Arrived Link
           GestureDetector(
@@ -915,8 +926,8 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
                 size: 20,
                 color: Colors.red[700],
               ),
-              SizedBox(width: 8),
-              Text(
+              const SizedBox(width: 8),
+              const Text(
                 'Passenger not arrived?',
                 style: TextStyle(
                   fontSize: 14,
@@ -976,7 +987,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
                   ),
                 ),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Expanded(
                 child: SizedBox(
                   height: 40,
@@ -994,7 +1005,7 @@ class _PickupArrivalScreenState extends ConsumerState<PickupArrivalScreen> {
                       ),
                       backgroundColor: Colors.white,
                     ),
-                    child: Text(
+                    child: const Text(
                       'Wait 2 Min',
                       style: TextStyle(
                         fontSize: 13,

@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:urbandriver/features/home/data/models/duty_model.dart';
 import '../../data/models/trip_log_models.dart';
+import '../../data/models/booking_model.dart';
 import '../../data/repositories/trip_repository.dart';
+import '../../data/services/booking_api_service.dart';
 
 class PickupStop {
   final String stopNumber;
@@ -18,6 +21,8 @@ class PickupStop {
   final String distance;
   final bool isArrived;
   final bool isPickedUp;
+  final BookingResponse? bookingData;
+  final int passengerCount;
 
   PickupStop({
     required this.stopNumber,
@@ -31,6 +36,8 @@ class PickupStop {
     required this.distance,
     this.isArrived = false,
     this.isPickedUp = false,
+    this.bookingData,
+    this.passengerCount = 0,
   });
 
   PickupStop copyWith({
@@ -45,6 +52,8 @@ class PickupStop {
     String? distance,
     bool? isArrived,
     bool? isPickedUp,
+    BookingResponse? bookingData,
+    int? passengerCount,
   }) {
     return PickupStop(
       stopNumber: stopNumber ?? this.stopNumber,
@@ -58,6 +67,8 @@ class PickupStop {
       distance: distance ?? this.distance,
       isArrived: isArrived ?? this.isArrived,
       isPickedUp: isPickedUp ?? this.isPickedUp,
+      bookingData: bookingData ?? this.bookingData,
+      passengerCount: passengerCount ?? this.passengerCount,
     );
   }
 }
@@ -85,6 +96,9 @@ class PickupState {
   final bool isStartingTrip;
   final bool isEndingTrip;
   final bool startTripFailed;
+  final String travelDate;
+  final bool isFetchingBooking;
+  final bool isFetchingStopCounts;
 
   PickupState({
     required this.stops,
@@ -104,12 +118,15 @@ class PickupState {
     this.endLatitude = 0.0,
     this.endLongitude = 0.0,
     this.endScheduledTime = '',
-    this.loggedCheckpointUqIds = const <String>{},
+    Set<String>? loggedCheckpointUqIds,
     this.hasEndedTrip = false,
     this.isStartingTrip = false,
     this.isEndingTrip = false,
     this.startTripFailed = false,
-  });
+    this.travelDate = '',
+    this.isFetchingBooking = false,
+    this.isFetchingStopCounts = false,
+  }): loggedCheckpointUqIds = loggedCheckpointUqIds ?? const <String>{};
 
   PickupState copyWith({
     List<PickupStop>? stops,
@@ -134,6 +151,9 @@ class PickupState {
     bool? isStartingTrip,
     bool? isEndingTrip,
     bool? startTripFailed,
+    String? travelDate,
+    bool? isFetchingBooking,
+    bool? isFetchingStopCounts,
   }) {
     return PickupState(
       stops: stops ?? this.stops,
@@ -158,6 +178,9 @@ class PickupState {
       isStartingTrip: isStartingTrip ?? this.isStartingTrip,
       isEndingTrip: isEndingTrip ?? this.isEndingTrip,
       startTripFailed: startTripFailed ?? this.startTripFailed,
+      travelDate: travelDate ?? this.travelDate,
+      isFetchingBooking: isFetchingBooking ?? this.isFetchingBooking,
+      isFetchingStopCounts: isFetchingStopCounts ?? this.isFetchingStopCounts,
     );
   }
 
@@ -188,6 +211,7 @@ class PickupState {
 
 class PickupNotifier extends StateNotifier<PickupState> {
   final TripRepository _repository;
+  final BookingApiService _bookingApiService = BookingApiService();
   // Bumping version to v3 to invalidate stale test data
   static const String _progressPrefix = 'pickup_progress_v3_';
 
@@ -227,6 +251,9 @@ class PickupNotifier extends StateNotifier<PickupState> {
     final tripDutyNo = (routeCode != null && routeCode.isNotEmpty)
       ? routeCode
       : (route.isNotEmpty ? route : duty.dutyNo.trim());
+    
+    final travelDate = DateFormat('yyyy-MM-dd').format(duty.date);
+    
     state = PickupState(
       stops: pickupStops,
       currentStopIndex: 0,
@@ -245,9 +272,79 @@ class PickupNotifier extends StateNotifier<PickupState> {
       endLatitude: duty.dropLatitude,
       endLongitude: duty.dropLongitude,
       endScheduledTime: duty.closeTime,
+      travelDate: travelDate,
     );
 
     await _restoreSavedProgress();
+    
+    // Fetch stop counts for all stops
+    fetchStopPassengerCounts();
+    
+    // Initial booking fetch for first stop
+    if (state.stops.isNotEmpty) {
+      fetchBookingForCurrentStop();
+    }
+  }
+
+  Future<void> fetchStopPassengerCounts() async {
+    if (state.isFetchingStopCounts || state.dutyNo.isEmpty) return;
+
+    state = state.copyWith(isFetchingStopCounts: true);
+
+    try {
+      final response = await _bookingApiService.getStopPassengerCounts(
+        routeNo: state.dutyNo,
+        from: state.startCheckpointName,
+        to: state.endCheckpointName,
+        travelDate: state.travelDate,
+      );
+
+      if (response != null) {
+        final updatedStops = List<PickupStop>.from(state.stops);
+        for (var i = 0; i < updatedStops.length; i++) {
+          final stop = updatedStops[i];
+          final countMatch = response.stops.firstWhere(
+            (s) => s.stopName.trim().toUpperCase() == stop.location.trim().toUpperCase(),
+            orElse: () => StopPassengerCount(stopName: stop.location, passengerCount: 0),
+          );
+          updatedStops[i] = stop.copyWith(passengerCount: countMatch.passengerCount);
+        }
+        state = state.copyWith(stops: updatedStops);
+      }
+    } catch (e) {
+      print('⚠️ [PickupProvider] Failed to fetch stop counts: $e');
+    } finally {
+      state = state.copyWith(isFetchingStopCounts: false);
+    }
+  }
+
+  Future<void> fetchBookingForCurrentStop() async {
+    final currentStop = state.currentStop;
+    if (currentStop == null || currentStop.bookingData != null || state.isFetchingBooking) {
+      return;
+    }
+
+    state = state.copyWith(isFetchingBooking: true);
+
+    try {
+      final response = await _bookingApiService.getBookings(
+        routeNo: state.dutyNo,
+        pickup: currentStop.location,
+        from: state.startCheckpointName,
+        to: state.endCheckpointName,
+        travelDate: state.travelDate,
+      );
+
+      if (response != null) {
+        final updatedStops = List<PickupStop>.from(state.stops);
+        updatedStops[state.currentStopIndex] = currentStop.copyWith(bookingData: response);
+        state = state.copyWith(stops: updatedStops);
+      }
+    } catch (e) {
+      print('⚠️ [PickupProvider] Failed to fetch booking: $e');
+    } finally {
+      state = state.copyWith(isFetchingBooking: false);
+    }
   }
 
   String _buildDutyProgressKey(DutyModel duty) {
@@ -564,6 +661,8 @@ class PickupNotifier extends StateNotifier<PickupState> {
     if (state.currentStopIndex < state.stops.length - 1) {
       state = state.copyWith(currentStopIndex: state.currentStopIndex + 1);
       print('✅ [pickup_provider] Advanced to next stop: #${state.currentStopIndex + 1}');
+      // Fetch booking for the next stop
+      fetchBookingForCurrentStop();
     } else {
       state = state.copyWith(currentStopIndex: state.stops.length);
       print('✅ [pickup_provider] All stops completed!');
